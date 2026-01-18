@@ -3,10 +3,11 @@ use crate::cache::user_cache::get_user_config;
 use reqwest::{Client, Method};
 use serde_json::Value;
 use std::sync::LazyLock;
+use crate::api::openspace::pub_user_info::UserInfo;
 
 static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
-static API: LazyLock<OSApi> = LazyLock::new(|| create_os_api());
+static API: LazyLock<OSApi> = LazyLock::new(|| create_os_api().unwrap());
 
 struct OSApi {
     api_host: String,
@@ -56,14 +57,17 @@ impl OSApi {
     }
 }
 
-fn create_os_api() -> OSApi {
-    let config = get_user_config().expect("Failed to get user config");
+fn create_os_api() -> Result<OSApi, String> {
+    let config = get_user_config().map_err(|e| {
+        eprintln!("Error getting user config: {}", e);
+        "Unable to get user config".to_string()
+    })?;
 
-    OSApi::new(
+    Ok(OSApi::new(
         config.api_config.host().to_string(),
         config.access_token,
         config.token_type,
-    )
+    ))
 }
 
 pub async fn make_request(
@@ -80,4 +84,10 @@ pub async fn make_request(
     println!("{}", serde_json::to_string(&res).unwrap());
 
     Ok(res)
+}
+
+pub async fn get_user_info() -> Result<UserInfo, Box<dyn std::error::Error>> {
+    let res = make_request("GET", "/api/self", Value::Null, None).await?;
+    let user_info: UserInfo = serde_json::from_value(res)?;
+    Ok(user_info)
 }

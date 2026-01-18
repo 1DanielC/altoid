@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { AuthProvider } from './UserContext.tsx';
+import { UserProvider } from './UserContext.tsx';
 import { UploadProvider } from './UploadContext';
 
 /**
@@ -11,14 +11,14 @@ import { UploadProvider } from './UploadContext';
  */
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   return (
-    <AuthProvider>
+    <UserProvider>
       <UploadProvider>
         {children}
       </UploadProvider>
-    </AuthProvider>
+    </UserProvider>
   );
 };
 
 // Re-export hooks for convenience
-export { useAuth } from './UserContext.tsx';
+export { useUser } from './UserContext.tsx';
 export { useUpload } from './UploadContext';

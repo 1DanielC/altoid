@@ -1,11 +1,10 @@
-use crate::api::oauth::pkg_auth::{
-    DeviceCodeRequest, DeviceCodeResponse, TokenRequest, TokenResponse,
-};
+use crate::api::oauth::pkg_auth::{DeviceCodeRequest, DeviceCodeResponse, TokenRequest, TokenResponse};
 use crate::cache::{oauth_cache};
 use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
-use crate::cache::user_cache::save_user_config;
+use crate::cache::pub_user_config::UserConfig;
+use crate::cache::user_cache::{get_user_config, save_user_config};
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
@@ -14,7 +13,7 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .expect("Failed to create HTTP client")
 });
 
-pub async fn authenticate_user() -> Result<bool, Box<dyn std::error::Error>> {
+pub async fn authenticate_user() -> Result<UserConfig, Box<dyn std::error::Error>> {
     let login_config = oauth_cache::get_oauth_config()?;
     let auth_url = login_config.env.get_auth_url();
     let token_url = login_config.env.get_token_url();
@@ -100,7 +99,7 @@ pub async fn authenticate_user() -> Result<bool, Box<dyn std::error::Error>> {
     };
 
     save_user_config(token_response.access_token.clone(), token_response.token_type.clone());
-    Ok(true)
+    get_user_config()
 }
 
 pub fn get_user_initials(full_name: Option<String>) -> String {

@@ -1,112 +1,64 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { OpenSpaceAPIClient } from '../api/client';
-import { loginAndGetAuthToken } from '../rust-api/services/AuthService';
-import { checkAuth } from '../rust-api/services/SystemService';
-import { AuthResult } from '../rust-api/model/AuthResult.ts';
-
-// ============================================================================
-// TYPES
-// ============================================================================
-interface UserInfo {
-  email: string;
-  fullName?: string;
-}
+import React, {createContext, useContext, useState, ReactNode, useEffect} from 'react';
+import {getUser, logout} from "./services/ApiService.ts";
+import {UserInfo} from "../rust-api/model/AuthResult.ts";
+import {deleteData} from "./services/SystemService.ts";
 
 interface AuthContextType {
   userInfo: UserInfo | null;
   isLoggingIn: boolean;
-  apiClient: OpenSpaceAPIClient | null;
-  login: () => Promise<void>;
+  doLogin: (clearAuth: Boolean) => Promise<void>;
+  doLogout: () => Promise<void>;
+  deleteAllData: () => Promise<void>;
 }
 
 const UserContext = createContext<AuthContextType | undefined>(undefined);
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-function initializeApiClient(authData: AuthResult): OpenSpaceAPIClient {
-  sessionStorage.setItem('os_token', authData.accessToken);
-  sessionStorage.setItem('os_token_type', authData.tokenType);
-  sessionStorage.setItem('os_api_host', authData.apiHost);
-
-  return new OpenSpaceAPIClient(
-    authData.apiHost,
-    authData.accessToken,
-    authData.tokenType
-  );
-}
-
-function restoreApiClientFromSession(): OpenSpaceAPIClient | null {
-  const storedToken = sessionStorage.getItem('os_token');
-  const tokenType = sessionStorage.getItem('os_token_type');
-  const apiHost = sessionStorage.getItem('os_api_host');
-
-  console.log("Restoring API client from session:", { storedToken, tokenType, apiHost });
-  if (storedToken && tokenType && apiHost) {
-    return new OpenSpaceAPIClient(apiHost, storedToken, tokenType);
-  }
-
-  return null;
-}
-
-// ============================================================================
-// PROVIDER
-// ============================================================================
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const UserProvider: React.FC<{ children: ReactNode }> = ({children}) => {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [apiClient, setApiClient] = useState<OpenSpaceAPIClient | null>(null);
 
-  // Restore session on mount
   useEffect(() => {
-    const client = restoreApiClientFromSession();
-
-    if (client) {
-      setApiClient(client);
-
-      client.getSelf()
-        .then(setUserInfo)
-        .catch(() => {
-          sessionStorage.clear();
-          setApiClient(null);
-          setUserInfo(null);
-        });
-    } else {
-      checkAuth()
-        .then(setUserInfo)
-        .catch(() => setUserInfo(null));
-    }
+    doLogin().then(() => {});
   }, []);
 
-  const login = async () => {
+  const doLogin = async (clearAuth: Boolean = false) => {
     setIsLoggingIn(true);
     try {
-      const authData = await loginAndGetAuthToken();
-      setUserInfo(authData.userInfo);
+      if (clearAuth) {
+        await doLogout()
+      }
 
-      const client = initializeApiClient(authData);
-      setApiClient(client);
+      const authData: UserInfo = await getUser();
+      console.log("User Acquired", authData);
+      setUserInfo(authData);
     } catch (error) {
       console.error('Login failed:', error);
     } finally {
       setIsLoggingIn(false);
     }
-  };
+  }
+
+  const doLogout = async () => {
+    await logout();
+    setUserInfo(null);
+  }
+
+  const deleteAllData = async () => {
+    await deleteData()
+    setUserInfo(null);
+  }
 
   return (
-    <UserContext.Provider value={{ userInfo, isLoggingIn, apiClient, login }}>
-      {children}
-    </UserContext.Provider>
+      <UserContext.Provider value={{userInfo, isLoggingIn, doLogin, doLogout, deleteAllData}}>
+        {children}
+      </UserContext.Provider>
   );
 };
 
-// ============================================================================
-// HOOK
-// ============================================================================
-export const useAuth = () => {
+export const useUser = () => {
   const context = useContext(UserContext);
   if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+    throw new Error('useUser must be used within UserProvider');
   }
   return context;
 };

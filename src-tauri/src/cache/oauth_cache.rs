@@ -8,8 +8,3 @@ pub fn get_oauth_config() -> Result<OAuthConfig, Box<dyn std::error::Error>> {
 pub fn save_auth_data(auth_data: &OAuthConfig) {
     root_cache::write_cache_file(OAUTH_CONFIG_FILE, auth_data).expect("Error Saving Auth Data");
 }
-
-pub fn clear_auth_data() -> Result<(), Box<dyn std::error::Error>> {
-    root_cache::clear_cache_file(OAUTH_CONFIG_FILE)?;
-    Ok(())
-}

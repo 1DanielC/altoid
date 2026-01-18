@@ -18,15 +18,6 @@ pub struct TokenResponse {
     pub scope: Option<String>,
 }
 
-
-#[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
-pub struct UserInfo {
-    pub email: String,
-    #[serde(rename = "fullName")]
-    pub full_name: Option<String>,
-}
-
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeviceCodeRequest {
     pub client_id: String,

@@ -1,4 +1,4 @@
-import { useAuth } from '../contexts/AppContext';
+import {useUser} from '../contexts/AppContext';
 
 function getInitials(fullName?: string): string {
   if (!fullName || !fullName.trim()) {
@@ -21,19 +21,24 @@ function getInitials(fullName?: string): string {
 }
 
 export default function LoginButton() {
-  const { userInfo, isLoggingIn, login } = useAuth();
+  const {userInfo, isLoggingIn, doLogin} = useUser();
 
   const initials = userInfo
-    ? getInitials(userInfo.fullName)
-    : '🔑';
+      ? getInitials(userInfo.fullName)
+      : '🔑';
 
+  const disabled = isLoggingIn || !!userInfo;
+  console.log("Login button disabled", disabled);
+  console.log("Login button initials", initials);
+  console.log("Login button userInfo", userInfo);
+  console.log("Login button isLoggingIn", isLoggingIn);
   return (
-    <button
-      className="login-button"
-      disabled={isLoggingIn || !!userInfo}
-      onClick={login}
-    >
-      {initials}
-    </button>
+      <button
+          className="login-button"
+          disabled={disabled}
+          onClick={() => doLogin(true)}
+      >
+        {initials}
+      </button>
   );
 }

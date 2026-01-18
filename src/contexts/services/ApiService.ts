@@ -1,4 +1,5 @@
 import {invoke} from "@tauri-apps/api/core";
+import {UserInfo} from "../../rust-api/model/AuthResult.ts";
 
 export async function request(
     method: string,
@@ -12,4 +13,12 @@ export async function request(
     body,
     content_type
   })
+}
+
+export async function getUser(): Promise<UserInfo> {
+  return invoke<UserInfo>("get_user");
+}
+
+export async function logout(): Promise<void> {
+  return invoke("clear_auth");
 }

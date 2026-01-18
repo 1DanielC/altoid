@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::api::openspace::pub_config;
+use crate::cache::pub_oauth_config::OAUTH_CONFIG_FILE;
+use crate::cache::root_cache;
 
 pub const USER_CONFIG_FILE: &str = "user_config.json";
 

@@ -1,27 +1,39 @@
 use crate::api::oauth::auth::authenticate_user;
-use crate::api::openspace::api::make_request;
+use crate::api::openspace::api::{get_user_info, make_request};
+use crate::api::openspace::pub_user_info::UserInfo;
 use crate::api::openspace::upload_all_files;
 use crate::api::openspace::upload_all_files::{upload_all_files, FileInfo};
 use crate::cache::root_cache::clear_all_cache;
+use crate::cache::user_cache::clear_user_config;
+use serde_json::Value;
 use std::sync::mpsc;
 use std::thread;
-use serde_json::Value;
 use tauri::Emitter;
+use crate::cache::file_cache::clear_skipped_files;
 
 mod api;
 mod cache;
 mod camera;
 
 #[tauri::command]
-async fn login() -> Result<bool, String> {
-    println!("Logging in...");
-    // Run OAuth flow and save tokens
-    let auth_result = authenticate_user().await.map_err(|e| e.to_string())?;
+async fn get_user() -> Result<UserInfo, String> {
+    // Try to get user info first
+    if let Ok(ui) = get_user_info().await {
+        return Ok(ui);
+    }
 
-    Ok(auth_result)
+    authenticate_user().await.map_err(|e| {
+        eprintln!("Error authenticating user: {}", e);
+        "Unable to authenticate user".to_string()
+    })?;
+
+    // Then try to get user info again
+    get_user_info().await.map_err(|e| {
+        eprintln!("Get user info error: {}", e);
+        "Unable to get user info after authentication".to_string()
+    })
 }
 
-// 4. Upload files command (spawns background thread, emits events)
 #[tauri::command]
 async fn start_upload(app_handle: tauri::AppHandle) -> Result<(), String> {
     let (tx, rx) = mpsc::channel();
@@ -57,7 +69,16 @@ async fn start_upload(app_handle: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn clear_cache() -> Result<(), String> {
-    clear_all_cache().map_err(|e| e.to_string())
+    println!("Clearing cache");
+    clear_user_cache().map_err(|e| e.to_string())?;
+    clear_skipped_files().map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_user_cache() -> Result<(), String> {
+    clear_user_config().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -80,9 +101,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            login,
+            get_user,
             start_upload,
             clear_cache,
+            clear_user_cache,
             get_camera_files,
             req,
         ])

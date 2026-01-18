@@ -1,14 +1,14 @@
-import { useUpload } from '../contexts/AppContext';
+import {useUser} from '../contexts/AppContext';
 
 export default function ClearCacheButton() {
-  const { clearCache } = useUpload();
+  const {deleteAllData} = useUser();
 
   return (
-    <button
-      className="button button-danger"
-      onClick={clearCache}
-    >
-      Clear Cache
-    </button>
+      <button
+          className="button button-danger"
+          onClick={deleteAllData}
+      >
+        Clear Cache
+      </button>
   );
 }
