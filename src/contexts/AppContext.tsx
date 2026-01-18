@@ -1,24 +1,30 @@
 import React, { ReactNode } from 'react';
-import { UserProvider } from './UserContext.tsx';
-import { UploadProvider } from './UploadContext';
+import { QueryProvider } from './QueryProvider';
+import { UploadProgressProvider } from './UploadProgressContext';
 
 /**
- * AppProvider composes all feature-based contexts.
+ * AppProvider composes React Query and upload progress tracking.
  *
  * Context hierarchy:
- * - AuthContext: User authentication, API client
- * - UploadContext: File uploads, device info (depends on AuthContext)
+ * - QueryProvider: React Query client for all server state
+ * - UploadProgressProvider: Real-time upload progress from Tauri events
  */
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   return (
-    <UserProvider>
-      <UploadProvider>
+    <QueryProvider>
+      <UploadProgressProvider>
         {children}
-      </UploadProvider>
-    </UserProvider>
+      </UploadProgressProvider>
+    </QueryProvider>
   );
 };
 
 // Re-export hooks for convenience
-export { useUser } from './UserContext.tsx';
-export { useUpload } from './UploadContext';
+export {
+  useUserQuery,
+  useLoginMutation,
+  useLogoutMutation,
+  useDeleteDataMutation,
+  useUploadMutation,
+} from '../hooks';
+export { useUploadProgress } from './UploadProgressContext';

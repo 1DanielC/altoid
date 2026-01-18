@@ -1,10 +1,12 @@
-use crate::api::oauth::pkg_auth::{DeviceCodeRequest, DeviceCodeResponse, TokenRequest, TokenResponse};
-use crate::cache::{oauth_cache};
+use crate::api::oauth::pkg_auth::{
+    DeviceCodeRequest, DeviceCodeResponse, TokenRequest, TokenResponse,
+};
+use crate::cache::oauth_cache;
+use crate::cache::pub_user_config::UserConfig;
+use crate::cache::user_cache::{get_user_config, save_user_config};
 use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
-use crate::cache::pub_user_config::UserConfig;
-use crate::cache::user_cache::{get_user_config, save_user_config};
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
@@ -13,8 +15,10 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .expect("Failed to create HTTP client")
 });
 
-pub async fn authenticate_user() -> Result<UserConfig, Box<dyn std::error::Error>> {
-    let login_config = oauth_cache::get_oauth_config()?;
+pub async fn authenticate_user() -> Result<UserConfig, String> {
+    let login_config = oauth_cache::get_oauth_config()
+        .ok_or("No OAuth config found. Please run 'openspace login' first.")?;
+
     let auth_url = login_config.env.get_auth_url();
     let token_url = login_config.env.get_token_url();
     let audience = login_config.env.get_audience();
@@ -31,9 +35,11 @@ pub async fn authenticate_user() -> Result<UserConfig, Box<dyn std::error::Error
         .post(&auth_url)
         .json(&device_code_request)
         .send()
-        .await?
+        .await
+        .map_err(|e| format!("Failed to request device code: {}", e))?
         .json()
-        .await?;
+        .await
+        .map_err(|e| format!("Failed to parse device code response: {}", e))?;
 
     println!(
         "Device code received. User code: {}",
@@ -75,31 +81,34 @@ pub async fn authenticate_user() -> Result<UserConfig, Box<dyn std::error::Error
             .post(&token_url)
             .json(&token_request)
             .send()
-            .await?;
+            .await
+            .map_err(|e| format!("Failed token request: {}", e))?;
+
 
         if response.status().is_success() {
-            let token_response: TokenResponse = response.json().await?;
+            let token_response: TokenResponse = response
+                .json()
+                .await
+                .map_err(|e| format!("Failed parsing token response: {}", e))?;
             break token_response;
         } else {
             // Check for authorization_pending or slow_down errors (expected during polling)
             let status = response.status();
-            let error_text = response.text().await?;
+            let error_text = response.text().await;
 
-            if error_text.contains("authorization_pending") {
-                // Still waiting for user to authorize
-                continue;
-            } else if error_text.contains("slow_down") {
-                // Server asked us to slow down, add extra delay
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                continue;
-            } else {
-                return Err(format!("Token request failed ({}): {}", status, error_text).into());
+            match error_text {
+                Ok(text) => println!("Token request failed ({}): {}", status, text),
+                Err(e) => println!("Failed to read error text: {}", e)
             }
         }
     };
 
-    save_user_config(token_response.access_token.clone(), token_response.token_type.clone());
-    get_user_config()
+    save_user_config(
+        token_response.access_token.clone(),
+        token_response.token_type.clone(),
+    );
+
+    Ok(get_user_config().ok_or("Failed to get user config after authentication")?)
 }
 
 pub fn get_user_initials(full_name: Option<String>) -> String {

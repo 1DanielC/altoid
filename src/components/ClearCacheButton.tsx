@@ -1,14 +1,15 @@
-import {useUser} from '../contexts/AppContext';
+import { useDeleteDataMutation } from '../contexts/AppContext';
 
 export default function ClearCacheButton() {
-  const {deleteAllData} = useUser();
+  const deleteDataMutation = useDeleteDataMutation();
 
   return (
       <button
           className="button button-danger"
-          onClick={deleteAllData}
+          disabled={deleteDataMutation.isPending}
+          onClick={() => deleteDataMutation.mutate()}
       >
-        Clear Cache
+        {deleteDataMutation.isPending ? 'Clearing...' : 'Clear Cache'}
       </button>
   );
 }

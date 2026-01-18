@@ -1,8 +1,8 @@
-import { useUpload } from '../contexts/AppContext';
+import { useUploadProgress } from '../contexts/AppContext';
 import UploadItem from './UploadItem';
 
 export default function UploadList() {
-  const { uploads } = useUpload();
+  const { uploads } = useUploadProgress();
   const uploadArray = Object.values(uploads);
 
   if (uploadArray.length === 0) {

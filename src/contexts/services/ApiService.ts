@@ -20,5 +20,5 @@ export async function getUser(): Promise<UserInfo> {
 }
 
 export async function logout(): Promise<void> {
-  return invoke("clear_auth");
+  return invoke("clear_user_cache");
 }

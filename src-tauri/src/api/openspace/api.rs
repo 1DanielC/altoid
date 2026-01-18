@@ -1,13 +1,13 @@
 use crate::api::http::client::create_http_client;
+use crate::api::openspace::pub_user_info::UserInfo;
 use crate::cache::user_cache::get_user_config;
 use reqwest::{Client, Method};
 use serde_json::Value;
 use std::sync::LazyLock;
-use crate::api::openspace::pub_user_info::UserInfo;
 
 static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
-static API: LazyLock<OSApi> = LazyLock::new(|| create_os_api().unwrap());
+static API: LazyLock<Option<OSApi>> = LazyLock::new(|| create_os_api());
 
 struct OSApi {
     api_host: String,
@@ -41,7 +41,10 @@ impl OSApi {
                 format!("{} {}", self.token_type, self.access_token),
             )
             .header("User-Agent", USER_AGENT)
-            .header("Content-Type", content_type.unwrap_or_else(|| "application/json".into()))
+            .header(
+                "Content-Type",
+                content_type.unwrap_or_else(|| "application/json".into()),
+            )
             .body(serde_json::to_vec(&body)?)
             .send()
             .await?;
@@ -56,18 +59,14 @@ impl OSApi {
         Ok(json)
     }
 }
-
-fn create_os_api() -> Result<OSApi, String> {
-    let config = get_user_config().map_err(|e| {
-        eprintln!("Error getting user config: {}", e);
-        "Unable to get user config".to_string()
-    })?;
-
-    Ok(OSApi::new(
-        config.api_config.host().to_string(),
-        config.access_token,
-        config.token_type,
-    ))
+fn create_os_api() -> Option<OSApi> {
+    get_user_config().map(|config| {
+        OSApi::new(
+            config.api_config.host().to_string(),
+            config.access_token,
+            config.token_type,
+        )
+    })
 }
 
 pub async fn make_request(
@@ -77,6 +76,8 @@ pub async fn make_request(
     content_type: Option<String>,
 ) -> Result<Value, String> {
     let res = API
+        .as_ref()
+        .ok_or("API not initialized")?
         .request(method, path, body, content_type)
         .await
         .map_err(|e| e.to_string())?;
@@ -85,9 +86,23 @@ pub async fn make_request(
 
     Ok(res)
 }
+pub async fn get_user_info() -> Result<Option<UserInfo>, String> {
+    match make_request("GET", "/api/self", Value::Null, None).await {
+        Ok(res) => {
+            let user_info = serde_json::from_value(res)
+                .map_err(|e| format!("Invalid user payload: {e}"))?;
 
-pub async fn get_user_info() -> Result<UserInfo, Box<dyn std::error::Error>> {
-    let res = make_request("GET", "/api/self", Value::Null, None).await?;
-    let user_info: UserInfo = serde_json::from_value(res)?;
-    Ok(user_info)
+            Ok(Some(user_info))
+        }
+
+        Err(e) if e.contains("401") => {
+            // Not authenticated → recoverable
+            Ok(None)
+        }
+
+        Err(e) => {
+            // Everything else is unrecoverable
+            Err(format!("Failed to fetch user info: {e}"))
+        }
+    }
 }

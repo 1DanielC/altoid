@@ -1,7 +1,7 @@
-import { useUpload } from '../contexts/AppContext';
+import { useUploadProgress } from '../contexts/AppContext';
 
 export default function Footer() {
-  const { deviceId, skippedCount } = useUpload();
+  const { deviceId, skippedCount } = useUploadProgress();
 
   return (
     <div id="footer">

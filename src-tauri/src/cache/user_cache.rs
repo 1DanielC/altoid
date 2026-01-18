@@ -1,7 +1,7 @@
 use crate::cache::pub_user_config::{UserConfig, USER_CONFIG_FILE};
 use crate::cache::root_cache;
 
-pub fn get_user_config() -> Result<UserConfig, Box<dyn std::error::Error>> {
+pub fn get_user_config() -> Option<UserConfig> {
     root_cache::read_cache_file(USER_CONFIG_FILE)
 }
 

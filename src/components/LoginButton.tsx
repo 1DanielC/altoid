@@ -1,4 +1,4 @@
-import {useUser} from '../contexts/AppContext';
+import { useUserQuery, useLoginMutation } from '../contexts/AppContext';
 
 function getInitials(fullName?: string): string {
   if (!fullName || !fullName.trim()) {
@@ -21,22 +21,25 @@ function getInitials(fullName?: string): string {
 }
 
 export default function LoginButton() {
-  const {userInfo, isLoggingIn, doLogin} = useUser();
+  // Query for current user state
+  const { data: userInfo, isLoading: isLoadingUser } = useUserQuery();
+
+  // Mutation for login action
+  const loginMutation = useLoginMutation();
 
   const initials = userInfo
       ? getInitials(userInfo.fullName)
       : '🔑';
 
+  // Derive loading state from query and mutation
+  const isLoggingIn = isLoadingUser || loginMutation.isPending;
   const disabled = isLoggingIn || !!userInfo;
-  console.log("Login button disabled", disabled);
-  console.log("Login button initials", initials);
-  console.log("Login button userInfo", userInfo);
-  console.log("Login button isLoggingIn", isLoggingIn);
+
   return (
       <button
           className="login-button"
           disabled={disabled}
-          onClick={() => doLogin(true)}
+          onClick={() => loginMutation.mutate({ clearAuth: !!userInfo })}
       >
         {initials}
       </button>

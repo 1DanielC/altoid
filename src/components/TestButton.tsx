@@ -1,8 +1,9 @@
-import {request} from "../contexts/services/ApiService.ts";
-import {useUser} from "../contexts/AppContext.tsx";
+import { request } from "../contexts/services/ApiService.ts";
+import { useUserQuery } from "../contexts/AppContext";
 
 export default function TestButton() {
-  const { userInfo } = useUser();
+  const { data: userInfo } = useUserQuery();
+
   return (
       <button
           className="button"

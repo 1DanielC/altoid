@@ -1,7 +1,7 @@
 use crate::cache::pub_oauth_config::{OAuthConfig, OAUTH_CONFIG_FILE};
 use crate::cache::root_cache;
 
-pub fn get_oauth_config() -> Result<OAuthConfig, Box<dyn std::error::Error>> {
+pub fn get_oauth_config() -> Option<OAuthConfig> {
     root_cache::read_cache_file(OAUTH_CONFIG_FILE)
 }
 

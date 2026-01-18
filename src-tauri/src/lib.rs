@@ -3,13 +3,12 @@ use crate::api::openspace::api::{get_user_info, make_request};
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::api::openspace::upload_all_files;
 use crate::api::openspace::upload_all_files::{upload_all_files, FileInfo};
-use crate::cache::root_cache::clear_all_cache;
-use crate::cache::user_cache::clear_user_config;
+use crate::cache::file_cache::clear_skipped_files;
+use crate::cache::user_cache::{clear_user_config, get_user_config};
 use serde_json::Value;
 use std::sync::mpsc;
 use std::thread;
 use tauri::Emitter;
-use crate::cache::file_cache::clear_skipped_files;
 
 mod api;
 mod cache;
@@ -17,21 +16,11 @@ mod camera;
 
 #[tauri::command]
 async fn get_user() -> Result<UserInfo, String> {
-    // Try to get user info first
-    if let Ok(ui) = get_user_info().await {
-        return Ok(ui);
+    if get_user_config().is_none() || get_user_info().await?.is_none() {
+        authenticate_user().await?;
     }
 
-    authenticate_user().await.map_err(|e| {
-        eprintln!("Error authenticating user: {}", e);
-        "Unable to authenticate user".to_string()
-    })?;
-
-    // Then try to get user info again
-    get_user_info().await.map_err(|e| {
-        eprintln!("Get user info error: {}", e);
-        "Unable to get user info after authentication".to_string()
-    })
+    get_user_info().await?.ok_or("User is not logged in. Please log in again".into())
 }
 
 #[tauri::command]
@@ -72,7 +61,7 @@ fn clear_cache() -> Result<(), String> {
     println!("Clearing cache");
     clear_user_cache().map_err(|e| e.to_string())?;
     clear_skipped_files().map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
