@@ -22,9 +22,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 // Re-export hooks for convenience
 export {
   useUserQuery,
+  useCameraQuery,
   useLoginMutation,
   useLogoutMutation,
   useDeleteDataMutation,
   useUploadMutation,
 } from '../hooks';
+
 export { useUploadProgress } from './UploadProgressContext';

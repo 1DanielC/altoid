@@ -1,8 +1,11 @@
 use crate::api::http::client::create_http_client;
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::cache::user_cache::get_user_config;
+use crate::error::AppError;
+use crate::ipc::ipc_error::IpcError;
+use crate::ipc::pub_ipc_response::IpcStatus;
 use reqwest::{Client, Method};
-use serde_json::Value;
+use serde_json::{from_value, Value};
 use std::sync::LazyLock;
 
 static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
@@ -30,10 +33,11 @@ impl OSApi {
         path: &str,
         body: Value,
         content_type: Option<String>,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    ) -> Result<Value, AppError> {
         println!("Requesting {} {}", method, path);
         let url = format!("{}{}", self.api_host, path);
-        let method = Method::from_bytes(method.as_bytes())?;
+        let method = Method::from_bytes(method.as_bytes())
+            .map_err(|e| AppError::InvalidArgument(format!("Invalid HTTP method: {}", e)))?;
         let response = API_CLIENT
             .request(method, &url)
             .header(
@@ -53,7 +57,10 @@ impl OSApi {
         let json = response.json::<Value>().await?;
         println!("Response: the sauce");
         if status.as_u16() >= 300 {
-            return Err(format!("Request failed: {}", status).into());
+            return Err(AppError::ApiRequest {
+                status: status.as_u16(),
+                message: format!("Request failed: {}", status),
+            });
         }
 
         Ok(json)
@@ -74,35 +81,43 @@ pub async fn make_request(
     path: &str,
     body: Value,
     content_type: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, AppError> {
     let res = API
         .as_ref()
-        .ok_or("API not initialized")?
+        .ok_or(AppError::ApiNotInitialized)?
         .request(method, path, body, content_type)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     println!("{}", serde_json::to_string(&res).unwrap());
 
     Ok(res)
 }
-pub async fn get_user_info() -> Result<Option<UserInfo>, String> {
+/// Special case function that returns IpcError to handle 401 as Ok(None).
+///
+/// This is one of the rare cases where we use IpcError instead of AppError,
+/// because we need to treat a 401 response as Ok(None) rather than an error,
+/// but still need explicit status codes for other errors.
+pub async fn get_user_info() -> Result<Option<UserInfo>, IpcError> {
     match make_request("GET", "/api/self", Value::Null, None).await {
         Ok(res) => {
-            let user_info = serde_json::from_value(res)
-                .map_err(|e| format!("Invalid user payload: {e}"))?;
+            let user_info = from_value(res).map_err(|e| {
+                IpcError::new(
+                    IpcStatus::InternalError,
+                    format!("Unable to parse user info: {}", e),
+                )
+            })?;
 
             Ok(Some(user_info))
         }
 
-        Err(e) if e.contains("401") => {
-            // Not authenticated → recoverable
+        Err(AppError::ApiRequest { status, message }) if status == 401 => {
+            // Not authenticated → recoverable, return Ok(None)
             Ok(None)
         }
 
         Err(e) => {
-            // Everything else is unrecoverable
-            Err(format!("Failed to fetch user info: {e}"))
+            // Convert AppError to IpcError
+            Err(IpcError::from(e))
         }
     }
 }

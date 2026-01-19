@@ -1,30 +1,82 @@
 use crate::api::oauth::auth::authenticate_user;
 use crate::api::openspace::api::{get_user_info, make_request};
 use crate::api::openspace::pub_user_info::UserInfo;
-use crate::api::openspace::upload_all_files::{upload_all_files};
+use crate::api::openspace::upload_all_files::upload_all_files;
 use crate::cache::file_cache::clear_skipped_files;
 use crate::cache::user_cache::{clear_user_config, get_user_config};
+use crate::camera::camera_finder::find_camera;
+use crate::error::AppError;
+use crate::ipc::pub_ipc_response::ToIpcResponse;
+use crate::traits::traits::ToJson;
 use serde_json::Value;
 use std::sync::mpsc;
 use std::thread;
+use gphoto::Camera;
 use tauri::Emitter;
-use crate::camera::camera_finder::find_camera;
 
 mod api;
 mod cache;
 mod camera;
+mod error;
+mod ipc;
+mod traits;
 
-#[tauri::command]
-async fn get_user() -> Result<UserInfo, String> {
-    if get_user_config().is_none() || get_user_info().await?.is_none() {
-        authenticate_user().await?;
-    }
-
-    get_user_info().await?.ok_or("User is not logged in. Please log in again".into())
+fn err_response(app_error: AppError) -> Value {
+    eprintln!("{}", app_error);
+    app_error.to_ipc_response().to_json().unwrap()
 }
 
 #[tauri::command]
-async fn start_upload(app_handle: tauri::AppHandle) -> Result<(), String> {
+async fn get_user() -> Result<UserInfo, Value> {
+    if get_user_config().is_none() {
+        authenticate_user()
+            .await
+            .map_err(|e: AppError| e.to_ipc_response().to_json().unwrap())?;
+    }
+
+    get_user_info()
+        .await
+        .map_err(|e| e.to_ipc_response().to_json().unwrap())?
+        .ok_or_else(|| err_response(AppError::NotAuthenticated))
+}
+
+#[tauri::command]
+async fn clear_cache() -> Result<(), Value> {
+    println!("Clearing cache");
+    clear_user_config()
+        .and_then(|_| clear_skipped_files())
+        .map_err(|e: AppError| err_response(e))
+}
+
+#[tauri::command]
+async fn req(
+    method: String,
+    path: String,
+    body: Value,
+    content_type: Option<String>,
+) -> Result<Value, Value> {
+    make_request(&method, &path, body, content_type)
+        .await
+        .map_err(|e: AppError| err_response(e))
+}
+
+#[tauri::command]
+async fn get_camera() -> Result<String, Value> {
+    let camera: Camera = find_camera()
+        .map_err(|e| err_response(e))?
+        .ok_or_else(|| err_response(AppError::CameraNotFound))?;
+
+    Ok(camera.port().name().to_string())
+}
+
+#[tauri::command]
+async fn get_camera_files() -> Result<(), Value> {
+    Ok(())
+}
+
+
+#[tauri::command]
+async fn upload_all_camera_files(app_handle: tauri::AppHandle) -> Result<(), Value> {
     let (tx, rx) = mpsc::channel();
 
     // Spawn blocking upload in background thread
@@ -56,49 +108,16 @@ async fn start_upload(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn clear_cache() -> Result<(), String> {
-    println!("Clearing cache");
-    clear_user_cache().map_err(|e| e.to_string())?;
-    clear_skipped_files().map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-#[tauri::command]
-fn clear_user_cache() -> Result<(), String> {
-    clear_user_config().map_err(|e| e.to_string())?;
-    clear_skipped_files().map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-#[tauri::command]
-fn get_camera_files() -> Result<(), String> {
-    find_camera().ok_or("No camera found".into())
-}
-
-#[tauri::command]
-async fn req(
-    method: String,
-    path: String,
-    body: Value,
-    content_type: Option<String>,
-) -> Result<Value, String> {
-    make_request(&method, &path, body, content_type).await
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_user,
-            start_upload,
-            clear_cache,
-            clear_user_cache,
-            get_camera_files,
             req,
+            get_camera,
+            get_camera_files,
+            clear_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

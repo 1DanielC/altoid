@@ -1,5 +1,6 @@
 // Queries
 export { useUserQuery, USER_QUERY_KEY } from './queries/useUserQuery';
+export { useCameraQuery, CAMERA_QUERY_KEY } from './queries/useCameraQuery';
 
 // Mutations
 export { useLoginMutation } from './mutations/useLoginMutation';

@@ -1,13 +1,14 @@
+use crate::api::http::client::create_http_client;
 use crate::api::openspace::tictac::{GetOrCreateUploadResponse, TicTacUploadRequest};
 use crate::cache::file_cache::{add_skipped_file, is_file_skipped};
+use crate::cache::pub_user_config::ApiConfig;
 use crate::camera::camera_finder::find_camera;
+use crate::error::AppError;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use walkdir::WalkDir;
-use crate::api::http::client::create_http_client;
-use crate::cache::pub_user_config::ApiConfig;
 
 const CHUNK_SIZE: i64 = 8 * 1024 * 1024; // 8MB chunks
 
@@ -64,6 +65,7 @@ pub enum UploadEvent {
 
 pub fn upload_all_files(
     progress_tx: Option<Sender<UploadEvent>>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), AppError> {
+    // TODO: Implement actual upload logic
     Ok(())
 }

@@ -4,6 +4,7 @@ use crate::api::oauth::pkg_auth::{
 use crate::cache::oauth_cache;
 use crate::cache::pub_user_config::UserConfig;
 use crate::cache::user_cache::{get_user_config, save_user_config};
+use crate::error::AppError;
 use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -15,9 +16,9 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .expect("Failed to create HTTP client")
 });
 
-pub async fn authenticate_user() -> Result<UserConfig, String> {
+pub async fn authenticate_user() -> Result<UserConfig, AppError> {
     let login_config = oauth_cache::get_oauth_config()
-        .ok_or("No OAuth config found. Please run 'openspace login' first.")?;
+        .ok_or(AppError::OAuthConfigNotFound)?;
 
     let auth_url = login_config.env.get_auth_url();
     let token_url = login_config.env.get_token_url();
@@ -35,11 +36,10 @@ pub async fn authenticate_user() -> Result<UserConfig, String> {
         .post(&auth_url)
         .json(&device_code_request)
         .send()
-        .await
-        .map_err(|e| format!("Failed to request device code: {}", e))?
+        .await?
         .json()
         .await
-        .map_err(|e| format!("Failed to parse device code response: {}", e))?;
+        .map_err(|e| AppError::ApiParseFailed(e.to_string()))?;
 
     println!(
         "Device code received. User code: {}",
@@ -66,7 +66,7 @@ pub async fn authenticate_user() -> Result<UserConfig, String> {
 
     let token_response = loop {
         if std::time::Instant::now() > expires_at {
-            return Err("Device code expired. Please try again.".into());
+            return Err(AppError::DeviceCodeExpired);
         }
 
         tokio::time::sleep(interval).await;
@@ -81,15 +81,14 @@ pub async fn authenticate_user() -> Result<UserConfig, String> {
             .post(&token_url)
             .json(&token_request)
             .send()
-            .await
-            .map_err(|e| format!("Failed token request: {}", e))?;
+            .await?;
 
 
         if response.status().is_success() {
             let token_response: TokenResponse = response
                 .json()
                 .await
-                .map_err(|e| format!("Failed parsing token response: {}", e))?;
+                .map_err(|e| AppError::ApiParseFailed(e.to_string()))?;
             break token_response;
         } else {
             // Check for authorization_pending or slow_down errors (expected during polling)
@@ -106,9 +105,9 @@ pub async fn authenticate_user() -> Result<UserConfig, String> {
     save_user_config(
         token_response.access_token.clone(),
         token_response.token_type.clone(),
-    );
+    )?;
 
-    Ok(get_user_config().ok_or("Failed to get user config after authentication")?)
+    Ok(get_user_config().ok_or_else(|| AppError::Internal("Failed to get user config after authentication".to_string()))?)
 }
 
 pub fn get_user_initials(full_name: Option<String>) -> String {

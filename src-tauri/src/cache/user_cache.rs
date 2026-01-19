@@ -1,11 +1,12 @@
 use crate::cache::pub_user_config::{UserConfig, USER_CONFIG_FILE};
 use crate::cache::root_cache;
+use crate::error::AppError;
 
 pub fn get_user_config() -> Option<UserConfig> {
     root_cache::read_cache_file(USER_CONFIG_FILE)
 }
 
-pub fn save_user_config(access_token: String, token_type: String) {
+pub fn save_user_config(access_token: String, token_type: String) -> Result<(), AppError> {
     let auth_data = UserConfig {
         access_token,
         token_type,
@@ -13,10 +14,10 @@ pub fn save_user_config(access_token: String, token_type: String) {
         api_config: Default::default(),
     };
 
-    root_cache::write_cache_file(USER_CONFIG_FILE, &auth_data).expect("Error Saving Auth Data");
+    root_cache::write_cache_file(USER_CONFIG_FILE, &auth_data)?;
+    Ok(())
 }
 
-pub fn clear_user_config() -> Result<(), Box<dyn std::error::Error>> {
-    root_cache::clear_cache_file(USER_CONFIG_FILE)?;
-    Ok(())
+pub fn clear_user_config() -> Result<(), AppError> {
+    root_cache::clear_cache_file(USER_CONFIG_FILE)
 }

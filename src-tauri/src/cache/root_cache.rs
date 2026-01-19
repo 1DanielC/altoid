@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
@@ -8,8 +9,8 @@ pub const STORAGE_DIR: &str = ".openspace_sync";
 pub static STORAGE_PATH: LazyLock<PathBuf> =
     LazyLock::new(|| get_or_create_storage_path().expect("Failed to initialize storage path"));
 
-fn get_or_create_storage_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let home = dirs::home_dir().ok_or("Could not find home directory")?;
+fn get_or_create_storage_path() -> Result<PathBuf, AppError> {
+    let home = dirs::home_dir().ok_or_else(|| AppError::Internal("Could not find home directory".to_string()))?;
     let storage_dir = home.join(STORAGE_DIR);
 
     if !storage_dir.exists() {
@@ -40,14 +41,17 @@ pub fn read_cache_file<T: serde::de::DeserializeOwned>(rel_path: &str) -> Option
 pub fn write_cache_file<T: serde::Serialize>(
     rel_path: &str,
     data: &T,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), AppError> {
     let path: PathBuf = STORAGE_PATH.join(rel_path);
-    let content = serde_json::to_string_pretty(data)?;
-    fs::write(path, content)?;
+    let content = serde_json::to_string_pretty(data).map_err(AppError::JsonSerialization)?;
+    fs::write(&path, content).map_err(|e| AppError::CacheWrite {
+        file: rel_path.to_string(),
+        source: e,
+    })?;
     Ok(())
 }
 
-pub fn clear_cache_file(rel_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn clear_cache_file(rel_path: &str) -> Result<(), AppError> {
     let path = STORAGE_PATH.join(rel_path);
 
     match fs::remove_file(&path) {
@@ -55,16 +59,24 @@ pub fn clear_cache_file(rel_path: &str) -> Result<(), Box<dyn std::error::Error>
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // File didn't exist, that's fine
         }
-        Err(e) => return Err(Box::new(e)), // propagate other errors
+        Err(e) => {
+            return Err(AppError::CacheWrite {
+                file: rel_path.to_string(),
+                source: e,
+            })
+        }
     }
 
     Ok(())
 }
 
-pub fn clear_all_cache() -> Result<(), Box<dyn std::error::Error>> {
+pub fn clear_all_cache() -> Result<(), AppError> {
     if let Some(storage_dir) = STORAGE_PATH.parent() {
         if storage_dir.exists() {
-            fs::remove_dir_all(storage_dir)?;
+            fs::remove_dir_all(storage_dir).map_err(|e| AppError::CacheWrite {
+                file: storage_dir.display().to_string(),
+                source: e,
+            })?;
         }
     }
     Ok(())

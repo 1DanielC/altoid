@@ -1,5 +1,5 @@
+use crate::error::AppError;
 use gphoto::{Camera, Context};
-use std::error::Error;
 use std::path::{Path, PathBuf};
 
 pub struct CameraInfo {
@@ -7,63 +7,67 @@ pub struct CameraInfo {
     pub device_id: String,
 }
 
-pub fn find_camera() -> Option<()> {
+pub fn find_camera() -> Result<Option<Camera>, AppError> {
     let os = std::env::consts::OS;
 
     match os {
         "linux" => {
             println!("Linux");
-            scan_for_camera_fs_linux();
-            Some(())
+            scan_for_camera_fs_linux()?;
+            Ok(None)
         }
         "windows" => {
             println!("Windows");
-            scan_for_camera_fs_windows();
-            Some(())
+            scan_for_camera_fs_windows()?;
+            Ok(None)
         }
         "macos" => {
             println!("MacOS");
-            let res = scan_for_camera_fs_macos();
-            if let Err(e) = res {
-                eprintln!("Error: {}", e);
-            }
-            Some(())
+            scan_for_camera_fs_macos()
         }
-        _ => panic!("Unsupported OS"),
+        _ => Err(AppError::UnsupportedOS(os.to_string())),
     }
 }
 
-fn scan_for_camera_fs_linux() -> Option<CameraInfo> {
-    eprintln!("Linux not supported yet");
-    None
+fn scan_for_camera_fs_linux() -> Result<CameraInfo, AppError> {
+    Err(AppError::UnsupportedOS("Linux camera support not implemented yet".to_string()))
 }
 
-fn scan_for_camera_fs_windows() -> Option<CameraInfo> {
-    eprintln!("Windows not supported yet");
-    None
+fn scan_for_camera_fs_windows() -> Result<CameraInfo, AppError> {
+    Err(AppError::UnsupportedOS("Windows camera support not implemented yet".to_string()))
 }
 
-fn scan_for_camera_fs_macos() -> Result<(), String> {
-    let mut context = Context::new().map_err(|e| e.to_string())?;
+fn scan_for_camera_fs_macos() -> Result<Option<Camera>, AppError> {
+    // Try to create the context, return None if it fails
+    let mut context = match Context::new() {
+        Ok(ctx) => ctx,
+        Err(_) => return Ok(None),
+    };
 
-    // Use a Result to avoid crashing if initialization fails
-    let camera_result = Camera::autodetect(&mut context);
-
-    match camera_result {
-        Ok(mut camera) => {
-            let storages = camera.storage(&mut context).map_err(|e| e.to_string())?;
-            let capture = camera.capture_image(&mut context).unwrap();
-            let file = gphoto::FileMedia::create(Path::new(&*capture.basename())).unwrap();
-            storages.iter().for_each(|storage| {
-                storage.description().map(|d| println!("{}", d));
-                println!("POOP")
-            });
-        }
-        Err(e) => {
-            eprintln!("Could not open camera: {:?}", e);
-            return Err("Camera unavailable (possibly claimed by another app)".into());
-        }
+    // Try to autodetect a camera, return None if it fails
+    match Camera::autodetect(&mut context) {
+        Ok(camera) => Ok(Some(camera)),
+        Err(_) => Ok(None),
     }
+}
+
+pub fn get_camera_info(camera: &Camera) -> CameraInfo {
+    unimplemented!()
+}
+
+pub fn get_camera_files(mut context: Context, mut camera: Camera) -> Result<(), AppError> {
+    let storages = camera
+        .storage(&mut context)
+        .map_err(|e| AppError::CameraOperation(e.to_string()))?;
+    let capture = camera
+        .capture_image(&mut context)
+        .map_err(|e| AppError::CameraOperation(e.to_string()))?;
+    let file = gphoto::FileMedia::create(Path::new(&*capture.basename()))
+        .map_err(|e| AppError::CameraOperation(e.to_string()))?;
+
+    storages.iter().for_each(|storage| {
+        storage.description().map(|d| println!("{}", d));
+    });
 
     Ok(())
 }
