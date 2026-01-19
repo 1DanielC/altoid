@@ -31,3 +31,6 @@ strum = "0.26"
 strum_macros = "0.26"
 regex = "1.11"
 
+gphoto = "0.1.2"
+
+

@@ -1,14 +1,14 @@
 use crate::api::oauth::auth::authenticate_user;
 use crate::api::openspace::api::{get_user_info, make_request};
 use crate::api::openspace::pub_user_info::UserInfo;
-use crate::api::openspace::upload_all_files;
-use crate::api::openspace::upload_all_files::{upload_all_files, FileInfo};
+use crate::api::openspace::upload_all_files::{upload_all_files};
 use crate::cache::file_cache::clear_skipped_files;
 use crate::cache::user_cache::{clear_user_config, get_user_config};
 use serde_json::Value;
 use std::sync::mpsc;
 use std::thread;
 use tauri::Emitter;
+use crate::camera::camera_finder::find_camera;
 
 mod api;
 mod cache;
@@ -67,12 +67,15 @@ fn clear_cache() -> Result<(), String> {
 
 #[tauri::command]
 fn clear_user_cache() -> Result<(), String> {
-    clear_user_config().map_err(|e| e.to_string())
+    clear_user_config().map_err(|e| e.to_string())?;
+    clear_skipped_files().map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
-fn get_camera_files() -> Result<Vec<FileInfo>, String> {
-    upload_all_files::get_uploadable_files().map_err(|e| e.to_string())
+fn get_camera_files() -> Result<(), String> {
+    find_camera().ok_or("No camera found".into())
 }
 
 #[tauri::command]
