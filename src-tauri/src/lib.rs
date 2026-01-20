@@ -10,7 +10,7 @@ use serde_json::Value;
 
 mod api;
 mod cache;
-mod camera;
+pub mod camera;
 mod error;
 mod ipc;
 mod traits;
