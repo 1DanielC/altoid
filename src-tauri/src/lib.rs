@@ -1,18 +1,12 @@
 use crate::api::oauth::auth::authenticate_user;
 use crate::api::openspace::api::{get_user_info, make_request};
 use crate::api::openspace::pub_user_info::UserInfo;
-use crate::api::openspace::upload_all_files::upload_all_files;
 use crate::cache::file_cache::clear_skipped_files;
 use crate::cache::user_cache::{clear_user_config, get_user_config};
-use crate::camera::camera_finder::find_camera;
 use crate::error::AppError;
 use crate::ipc::pub_ipc_response::ToIpcResponse;
 use crate::traits::traits::ToJson;
 use serde_json::Value;
-use std::sync::mpsc;
-use std::thread;
-use gphoto::Camera;
-use tauri::Emitter;
 
 mod api;
 mod cache;
@@ -61,50 +55,14 @@ async fn req(
 }
 
 #[tauri::command]
-async fn get_camera() -> Result<String, Value> {
-    let camera: Camera = find_camera()
-        .map_err(|e| err_response(e))?
-        .ok_or_else(|| err_response(AppError::CameraNotFound))?;
-
-    Ok(camera.port().name().to_string())
+async fn get_camera() -> Result<Value, Value> {
+    camera::camera::find_camera()
+        .to_json()
+        .map_err(|e| err_response(AppError::from(e)))
 }
 
 #[tauri::command]
 async fn get_camera_files() -> Result<(), Value> {
-    Ok(())
-}
-
-
-#[tauri::command]
-async fn upload_all_camera_files(app_handle: tauri::AppHandle) -> Result<(), Value> {
-    let (tx, rx) = mpsc::channel();
-
-    // Spawn blocking upload in background thread
-    thread::spawn(move || {
-        if let Err(e) = upload_all_files(Some(tx)) {
-            eprintln!("Upload failed: {}", e);
-        }
-    });
-
-    // Forward events from channel to Tauri event system
-    tauri::async_runtime::spawn(async move {
-        loop {
-            match rx.try_recv() {
-                Ok(event) => {
-                    // Emit event to frontend
-                    let _ = app_handle.emit("upload-event", event);
-                }
-                Err(mpsc::TryRecvError::Empty) => {
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                }
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    // Upload finished
-                    break;
-                }
-            }
-        }
-    });
-
     Ok(())
 }
 

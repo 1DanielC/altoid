@@ -10,12 +10,9 @@ export function useCameraQuery() {
       try {
         return await getCamera();
       } catch (error) {
-        // If user not authenticated, return null instead of throwing
-        console.log('User not authenticated:', error);
         return null;
       }
     },
-    // Automatically fetch on mount (replaces UserContext useEffect)
     staleTime: 5 * 60 * 1000,
   });
 }

@@ -1,6 +1,5 @@
 import {invoke} from "@tauri-apps/api/core";
 import {UserInfo} from "../../rust-api/model/AuthResult.ts";
-
 export async function request(
     method: string,
     path: string,

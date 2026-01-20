@@ -1,10 +1,5 @@
-pub struct Camera{
-    pub name: String,
-    pub fs_strategy: FileStrategy,
-    pub resource: String
-}
+use crate::camera::device_type::{CameraInfo, CAMERAS};
 
-enum FileStrategy {
-    MOUNT,
-    MTP
+pub fn find_camera() -> Option<&'static CameraInfo> {
+    Some(CAMERAS.get(&1482).unwrap())
 }
