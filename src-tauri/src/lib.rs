@@ -1,3 +1,6 @@
+use std::fmt::format;
+use std::time;
+use chrono::Local;
 use crate::api::oauth::auth::authenticate_user;
 use crate::api::openspace::api::{get_user_info, make_request};
 use crate::api::openspace::pub_user_info::UserInfo;
@@ -7,6 +10,7 @@ use crate::error::AppError;
 use crate::ipc::pub_ipc_response::ToIpcResponse;
 use crate::traits::traits::ToJson;
 use serde_json::Value;
+use tauri_plugin_log::{Builder, Target, TargetKind};
 use tauri_plugin_log::log::{error, info};
 
 mod api;
@@ -79,10 +83,17 @@ fn set_host(host: Option<String>) -> Result<(), Value> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let timestamp = Local::now().format("%Y-%m-%d");
+    let filename = format!("log-{}.log", timestamp);
+    let logger = Builder::new().targets([
+        Target::new(TargetKind::Stdout),
+        Target::new(TargetKind::LogDir { file_name: Some(filename) })
+    ]).build();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(logger)
         .invoke_handler(tauri::generate_handler![
             get_user,
             req,
