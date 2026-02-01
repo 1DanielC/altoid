@@ -1,7 +1,7 @@
 [package]
 name = "altoid"
 version = "0.1.0"
-description = "A Tauri App"
+description = "OpenSpace Desktop Sync App"
 authors = ["you"]
 edition = "2021"
 
@@ -35,3 +35,4 @@ bb-drivelist = "0.3.1"
 rusb = "0.9"
 gphoto2-sys = "0.1"
 libc = "0.2"
+tauri-plugin-fs = "2.0.0"
