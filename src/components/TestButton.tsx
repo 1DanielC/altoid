@@ -1,12 +1,12 @@
-import {useCameraQuery} from "../contexts/AppContext";
+import {logError, logInfo, logWarning} from "../services/log.ts";
 export default function TestButton() {
-  const {refetch} = useCameraQuery();
-
   return (
       <button
           className="button"
           onClick={() => {
-            console.log(refetch())
+            logInfo("POOP")
+            logWarning("SCOOP")
+            logError("DOOP")
           }}
       >
         Test Button

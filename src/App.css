@@ -42,7 +42,7 @@ body {
 #footer {
   background: #ececec;
   flex-shrink: 0;            /* prevent footer from shrinking */
-  height: 20vh;
+  height: 35vh;
 }
 
 /* Each row in the footer */

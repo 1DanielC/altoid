@@ -1,0 +1,202 @@
+/* ---------- Dialog Container ---------- */
+.dialog-container {
+  background: #ececec;
+}
+
+.dialog-container.collapsed .dialog-content {
+  display: none;
+}
+
+/* ---------- Dialog Header ---------- */
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #ececec;
+  border-top: 1px solid #a1a1a5;
+}
+
+.dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dialog-title-text {
+  font-size: 13px;
+  font-weight: bold;
+  color: #acacac;
+}
+
+.dialog-badge-container {
+  display: flex;
+  gap: 6px;
+}
+
+.dialog-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 8px;
+  color: #fff;
+}
+
+.badge-error {
+  background: #f44336;
+}
+
+.badge-warning {
+  background: #FF9800;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-clear-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid #a1a1a5;
+  border-radius: 3px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dialog-clear-btn:hover {
+  background: #ddd;
+  color: #555;
+}
+
+.dialog-toggle-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  background: #2196F3;
+  border: none;
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.dialog-toggle-btn:hover {
+  background: #1976D2;
+}
+
+/* ---------- Dialog Content ---------- */
+.dialog-content {
+  max-height: 120px;
+  min-height: 20vh;
+  overflow-y: auto;
+  background: #fff;
+  border-top: 1px solid #d0d0d0;
+}
+
+.dialog-empty {
+  text-align: center;
+  color: #aaa;
+  font-size: 12px;
+  padding: 15px;
+  font-style: italic;
+}
+
+/* ---------- Log Entry ---------- */
+.dialog-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.dialog-entry:last-of-type {
+  border-bottom: none;
+}
+
+/* Entry level backgrounds */
+.entry-info {
+  background: #f0f7ff;
+  border-left: 3px solid #2196F3;
+}
+
+.entry-warning {
+  background: #fffbf0;
+  border-left: 3px solid #FF9800;
+}
+
+.entry-error {
+  background: #fff5f5;
+  border-left: 3px solid #f44336;
+}
+
+/* Entry icon */
+.entry-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.entry-icon-spacer {
+  flex-shrink: 0;
+  width: 16px;
+}
+
+.icon-info {
+  background: #2196F3;
+}
+
+.icon-warning {
+  background: #FF9800;
+}
+
+.icon-error {
+  background: #f44336;
+}
+
+/* Entry timestamp */
+.entry-time {
+  flex-shrink: 0;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #999;
+}
+
+/* Entry message */
+.entry-message {
+  color: #666;
+}
+
+/* ---------- Scrollbar styling ---------- */
+.dialog-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.dialog-content::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+
+.dialog-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.dialog-content::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
