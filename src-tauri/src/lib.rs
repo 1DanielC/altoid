@@ -7,6 +7,7 @@ use crate::error::AppError;
 use crate::ipc::pub_ipc_response::ToIpcResponse;
 use crate::traits::traits::ToJson;
 use serde_json::Value;
+use tauri_plugin_log::log::{error, info};
 
 mod api;
 mod cache;
@@ -16,7 +17,7 @@ mod ipc;
 mod traits;
 
 fn err_response(app_error: AppError) -> Value {
-    eprintln!("{}", app_error);
+    error!("{}", app_error);
     app_error.to_ipc_response().to_json().unwrap()
 }
 
@@ -35,8 +36,8 @@ async fn get_user() -> Result<UserInfo, Value> {
 }
 
 #[tauri::command]
-async fn clear_cache as other___cmd__clear_cache() -> Result<(), Value> {
-    println!("Clearing cache");
+async fn clear_cache() -> Result<(), Value> {
+    info!("Clearing cache");
     clear_user_config()
         .and_then(|_| clear_skipped_files())
         .map_err(|e: AppError| err_response(e))
@@ -81,6 +82,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_log::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_user,
             req,

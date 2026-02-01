@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use tauri_plugin_log::log::{error, info};
 
 #[derive(Debug, Serialize)]
 pub struct CameraWithFiles {
@@ -17,7 +18,7 @@ pub fn find_camera() -> Option<CameraWithFiles> {
     let devices = match rusb::devices() {
         Ok(devices) => devices,
         Err(e) => {
-            eprintln!("Failed to enumerate USB devices: {}", e);
+            error!("Failed to enumerate USB devices: {}", e);
             return None;
         }
     };
@@ -29,7 +30,7 @@ pub fn find_camera() -> Option<CameraWithFiles> {
 
             // Check if this vendor ID matches any camera in our CAMERAS map
             if let Some(camera_info) = CAMERAS.get(&vendor_id) {
-                println!("Found camera: {} (Vendor ID: {})", camera_info.device, vendor_id);
+                info!("Found camera: {} (Vendor ID: {})", camera_info.device, vendor_id);
 
                 // Try to find the mounted storage device and list files
                 let (mount_point, files, access_error) = find_camera_files();
@@ -45,12 +46,12 @@ pub fn find_camera() -> Option<CameraWithFiles> {
     }
 
     // No matching camera found
-    eprintln!("No supported camera found connected via USB");
+    error!("No supported camera found connected via USB");
     None
 }
 
 fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
-    println!("Attempting PTP camera access via gphoto2 CLI...");
+    info!("Attempting PTP camera access via gphoto2 CLI...");
 
     // First, check if gphoto2 is available
     let check_gphoto2 = Command::new("which")
@@ -59,7 +60,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
 
     if check_gphoto2.is_err() || !check_gphoto2.as_ref().unwrap().status.success() {
         let error_msg = "gphoto2 CLI not found. Please install it with: brew install gphoto2".to_string();
-        eprintln!("{}", error_msg);
+        error!("{}", error_msg);
         return (None, Vec::new(), Some(error_msg));
     }
 
@@ -70,7 +71,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
 
     if let Err(e) = detect_output {
         let error_msg = format!("Failed to run gphoto2 --auto-detect: {}", e);
-        eprintln!("{}", error_msg);
+        error!("{}", error_msg);
         return (None, Vec::new(), Some(error_msg));
     }
 
@@ -80,11 +81,11 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
     // Check if any camera was detected
     if !detect_stdout.contains("usb:") {
         let error_msg = "No PTP camera detected by gphoto2".to_string();
-        eprintln!("{}", error_msg);
+        error!("{}", error_msg);
         return (None, Vec::new(), Some(error_msg));
     }
 
-    println!("Camera detected via gphoto2: {}", detect_stdout.trim());
+    info!("Camera detected via gphoto2: {}", detect_stdout.trim());
 
     // List files on the camera
     let list_output = Command::new("gphoto2")
@@ -93,7 +94,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
 
     if let Err(e) = list_output {
         let error_msg = format!("Failed to run gphoto2 --list-files: {}", e);
-        eprintln!("{}", error_msg);
+        error!("{}", error_msg);
         return (None, Vec::new(), Some(error_msg));
     }
 
@@ -105,10 +106,10 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
 
     if files.is_empty() {
         let error_msg = "Camera connected via PTP but no files found".to_string();
-        eprintln!("{}", error_msg);
+        error!("{}", error_msg);
         (Some(PathBuf::from("PTP")), Vec::new(), Some(error_msg))
     } else {
-        println!("Found {} files via PTP", files.len());
+        info!("Found {} files via PTP", files.len());
         (Some(PathBuf::from("PTP")), files, None)
     }
 }
@@ -153,27 +154,27 @@ fn find_camera_files() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
     }
 
     // If PTP didn't work, fall back to mass storage detection
-    println!("PTP access failed or no files found, trying mass storage detection...");
+    info!("PTP access failed or no files found, trying mass storage detection...");
 
     // Try to enumerate mounted drives
     let drives = match bb_drivelist::drive_list() {
         Ok(drives) => drives,
         Err(e) => {
             let error_msg = format!("Failed to enumerate drives: {}", e);
-            eprintln!("{}", error_msg);
+            error!("{}", error_msg);
             return (None, Vec::new(), Some(error_msg));
         }
     };
 
-    println!("Total drives detected: {}", drives.len());
+    info!("Total drives detected: {}", drives.len());
 
     // Look for removable drives (cameras typically mount as removable storage)
     for drive in &drives {
-        println!("Drive: device={}, is_removable={}, mountpoints={}",
+        info!("Drive: device={}, is_removable={}, mountpoints={}",
                  drive.device, drive.is_removable, drive.mountpoints.len());
 
         for mp in &drive.mountpoints {
-            println!("  Mountpoint: {}", mp.path);
+            info!("  Mountpoint: {}", mp.path);
         }
     }
 
@@ -186,15 +187,15 @@ fn find_camera_files() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
         // Try each mount point
         for mount_point in &drive.mountpoints {
             let path = PathBuf::from(&mount_point.path);
-            println!("Checking removable drive at: {}", path.display());
+            info!("Checking removable drive at: {}", path.display());
 
             match list_files_recursive(&path, &path) {
                 Ok(files) if !files.is_empty() => {
-                    println!("Found {} files on device at {}", files.len(), path.display());
+                    info!("Found {} files on device at {}", files.len(), path.display());
                     return (Some(path.clone()), files, None);
                 }
                 Ok(_) => {
-                    println!("No files found at {}", path.display());
+                    info!("No files found at {}", path.display());
                 }
                 Err(e) => {
                     let error_msg = format!(
@@ -203,7 +204,7 @@ fn find_camera_files() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
                         path.display(),
                         e
                     );
-                    eprintln!("{}", error_msg);
+                    error!("{}", error_msg);
                     return (Some(path.clone()), Vec::new(), Some(error_msg));
                 }
             }
@@ -221,24 +222,24 @@ fn find_camera_files() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
     for path_str in potential_paths {
         let path = PathBuf::from(path_str);
         if path.exists() {
-            println!("Found potential RICOH mount at: {}", path.display());
+            info!("Found potential RICOH mount at: {}", path.display());
             match list_files_recursive(&path, &path) {
                 Ok(files) if !files.is_empty() => {
-                    println!("Found {} files on device at {}", files.len(), path.display());
+                    info!("Found {} files on device at {}", files.len(), path.display());
                     return (Some(path.clone()), files, None);
                 }
                 Ok(_) => {
-                    println!("No files found at {}", path.display());
+                    info!("No files found at {}", path.display());
                 }
                 Err(e) => {
-                    eprintln!("Error accessing {}: {}", path.display(), e);
+                    info!("Error accessing {}: {}", path.display(), e);
                 }
             }
         }
     }
 
     let error_msg = "Camera found but no mounted storage device detected. Please ensure the camera is in the correct USB mode (usually 'Mass Storage' or 'File Transfer' mode).".to_string();
-    eprintln!("{}", error_msg);
+    error!("{}", error_msg);
     (None, Vec::new(), Some(error_msg))
 }
 
@@ -256,7 +257,7 @@ fn list_files_recursive(base_path: &PathBuf, current_path: &PathBuf) -> std::io:
             match list_files_recursive(base_path, &path) {
                 Ok(mut subfiles) => files.append(&mut subfiles),
                 Err(e) => {
-                    eprintln!("Warning: Could not read directory {}: {}", path.display(), e);
+                    error!("Warning: Could not read directory {}: {}", path.display(), e);
                     // Continue with other directories
                 }
             }

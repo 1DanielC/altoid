@@ -8,6 +8,7 @@ use reqwest::{Client, Method};
 use serde_json::{from_value, Value};
 use std::sync::LazyLock;
 use std::time::Duration;
+use tauri_plugin_log::log::info;
 
 static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
@@ -35,7 +36,7 @@ impl OSApi {
         body: Value,
         content_type: Option<String>,
     ) -> Result<Value, AppError> {
-        println!("Requesting {} {}", method, path);
+        info!("Requesting {} {}", method, path);
         let url = format!("{}{}", self.api_host, path);
         let method = Method::from_bytes(method.as_bytes())
             .map_err(|e| AppError::InvalidArgument(format!("Invalid HTTP method: {}", e)))?;
@@ -57,7 +58,7 @@ impl OSApi {
 
         let status = response.status();
         let json = response.json::<Value>().await?;
-        println!("Response: the sauce");
+        info!("Response: the sauce");
         if status.as_u16() >= 300 {
             return Err(AppError::ApiRequest {
                 status: status.as_u16(),
@@ -90,7 +91,7 @@ pub async fn make_request(
         .request(method, path, body, content_type)
         .await?;
 
-    println!("{}", serde_json::to_string(&res).unwrap());
+    info!("{}", serde_json::to_string(&res).unwrap());
 
     Ok(res)
 }

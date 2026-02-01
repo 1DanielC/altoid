@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
+use tauri_plugin_log::log::{error, info};
 
 #[derive(Debug, Serialize)]
 pub struct CameraWithFiles {
@@ -17,7 +18,7 @@ pub fn find_camera() -> Option<CameraWithFiles> {
     let devices = match rusb::devices() {
         Ok(devices) => devices,
         Err(e) => {
-            eprintln!("Failed to enumerate USB devices: {}", e);
+            error!("Failed to enumerate USB devices: {}", e);
             return None;
         }
     };
@@ -29,7 +30,7 @@ pub fn find_camera() -> Option<CameraWithFiles> {
 
             // Check if this vendor ID matches any camera in our CAMERAS map
             if let Some(camera_info) = CAMERAS.get(&vendor_id) {
-                println!("Found camera: {} (Vendor ID: {})", camera_info.device, vendor_id);
+                info!("Found camera: {} (Vendor ID: {})", camera_info.device, vendor_id);
 
                 // Try to find the camera using gphoto2
                 let (mount_point, files, access_error) = find_camera_files_gphoto2();
@@ -45,19 +46,19 @@ pub fn find_camera() -> Option<CameraWithFiles> {
     }
 
     // No matching camera found
-    eprintln!("No supported camera found connected via USB");
+    error!("No supported camera found connected via USB");
     None
 }
 
 fn find_camera_files_gphoto2() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
-    println!("Attempting PTP camera access via gphoto2-sys...");
+    info!("Attempting PTP camera access via gphoto2-sys...");
 
     unsafe {
         // Initialize context
         let context = gphoto2_sys::gp_context_new();
         if context.is_null() {
             let error_msg = "Failed to create gphoto2 context".to_string();
-            eprintln!("{}", error_msg);
+            error!("{}", error_msg);
             return (None, Vec::new(), Some(error_msg));
         }
 
@@ -66,7 +67,7 @@ fn find_camera_files_gphoto2() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>
         let ret = gphoto2_sys::gp_camera_new(&mut camera);
         if ret != gphoto2_sys::GP_OK {
             let error_msg = format!("Failed to create camera object: {}", get_error_string(ret));
-            eprintln!("{}", error_msg);
+            error!("{}", error_msg);
             gphoto2_sys::gp_context_unref(context);
             return (None, Vec::new(), Some(error_msg));
         }
@@ -75,19 +76,19 @@ fn find_camera_files_gphoto2() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>
         let ret = gphoto2_sys::gp_camera_init(camera, context);
         if ret != gphoto2_sys::GP_OK {
             let error_msg = format!("Failed to initialize camera: {}", get_error_string(ret));
-            eprintln!("{}", error_msg);
+            error!("{}", error_msg);
             gphoto2_sys::gp_camera_unref(camera);
             gphoto2_sys::gp_context_unref(context);
             return (None, Vec::new(), Some(error_msg));
         }
 
-        println!("Successfully connected to camera via gphoto2-sys");
+        info!("Successfully connected to camera via gphoto2-sys");
 
         // List files on the camera
         let files = match list_files_recursive(camera, context, "/") {
             Ok(files) => files,
             Err(e) => {
-                eprintln!("Error listing files: {}", e);
+                error!("Error listing files: {}", e);
                 gphoto2_sys::gp_camera_exit(camera, context);
                 gphoto2_sys::gp_camera_unref(camera);
                 gphoto2_sys::gp_context_unref(context);
@@ -102,10 +103,10 @@ fn find_camera_files_gphoto2() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>
 
         if files.is_empty() {
             let error_msg = "Camera connected via PTP but no files found".to_string();
-            eprintln!("{}", error_msg);
+            error!("{}", error_msg);
             (Some(PathBuf::from("PTP")), Vec::new(), Some(error_msg))
         } else {
-            println!("Found {} files via PTP", files.len());
+            info!("Found {} files via PTP", files.len());
             (Some(PathBuf::from("PTP")), files, None)
         }
     }
@@ -193,7 +194,7 @@ unsafe fn list_files_recursive(
                     match list_files_recursive(camera, context, &subfolder_path) {
                         Ok(mut subfiles) => all_files.append(&mut subfiles),
                         Err(e) => {
-                            eprintln!("Warning: Could not list files in subfolder {}: {}", subfolder_path, e);
+                            error!("Warning: Could not list files in subfolder {}: {}", subfolder_path, e);
                         }
                     }
                 }

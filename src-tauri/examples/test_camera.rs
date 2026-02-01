@@ -1,29 +1,31 @@
+use tauri_plugin_log::log::info;
+
 // Test program to verify camera detection
 fn main() {
-    println!("Testing camera detection...\n");
+    info!("Testing camera detection...\n");
 
     match altoid_lib::camera::camera::find_camera() {
         Some(camera_with_files) => {
-            println!("Camera detected:");
-            println!("  Device: {}", camera_with_files.info.device);
-            println!("  Vendor: {}", camera_with_files.info.vendor);
-            println!("  Vendor ID: {}", camera_with_files.info.vendor_id);
-            println!("  Mount point: {:?}", camera_with_files.mount_point);
-            println!("  Files found: {}", camera_with_files.files.len());
+            info!("Camera detected:");
+            info!("  Device: {}", camera_with_files.info.device);
+            info!("  Vendor: {}", camera_with_files.info.vendor);
+            info!("  Vendor ID: {}", camera_with_files.info.vendor_id);
+            info!("  Mount point: {:?}", camera_with_files.mount_point);
+            info!("  Files found: {}", camera_with_files.files.len());
 
             if let Some(error) = &camera_with_files.access_error {
-                println!("  Access error: {}", error);
+                info!("  Access error: {}", error);
             }
 
             if !camera_with_files.files.is_empty() {
-                println!("\nFirst 10 files:");
+                info!("\nFirst 10 files:");
                 for (i, file) in camera_with_files.files.iter().take(10).enumerate() {
-                    println!("  {}. {}", i + 1, file.display());
+                    info!("  {}. {}", i + 1, file.display());
                 }
             }
         }
         None => {
-            println!("No camera detected");
+            info!("No camera detected");
         }
     }
 }

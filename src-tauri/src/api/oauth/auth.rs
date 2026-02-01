@@ -8,6 +8,7 @@ use crate::error::AppError;
 use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
+use tauri_plugin_log::log::{error, info};
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
@@ -25,7 +26,7 @@ pub async fn authenticate_user() -> Result<UserConfig, AppError> {
     let audience = login_config.env.get_audience();
 
     // Step 1: Request device code from auth server
-    println!("Requesting device code...");
+    info!("Requesting device code...");
     let device_code_request = DeviceCodeRequest {
         client_id: login_config.client_id.clone(),
         scope: login_config.scope.as_ref().to_string(),
@@ -41,25 +42,25 @@ pub async fn authenticate_user() -> Result<UserConfig, AppError> {
         .await
         .map_err(|e| AppError::ApiParseFailed(e.to_string()))?;
 
-    println!(
+    info!(
         "Device code received. User code: {}",
         device_code_response.user_code
     );
 
     // Step 2: Open browser with verification_uri_complete
-    println!("Opening browser for authentication...");
+    info!("Opening browser for authentication...");
     if let Err(e) = open::that(&device_code_response.verification_uri_complete) {
-        eprintln!("Failed to open browser automatically: {}", e);
-        println!(
+        error!("Failed to open browser automatically: {}", e);
+        info!(
             "Please manually visit: {}",
             device_code_response.verification_uri_complete
         );
     } else {
-        println!("Browser opened. Please complete the authentication in your browser.");
+        info!("Browser opened. Please complete the authentication in your browser.");
     }
 
     // Step 3: Poll for token after user authenticates
-    println!("Waiting for authentication...");
+    info!("Waiting for authentication...");
     let interval = Duration::from_secs(device_code_response.interval);
     let expires_at =
         std::time::Instant::now() + Duration::from_secs(device_code_response.expires_in);
@@ -96,8 +97,8 @@ pub async fn authenticate_user() -> Result<UserConfig, AppError> {
             let error_text = response.text().await;
 
             match error_text {
-                Ok(text) => println!("Token request failed ({}): {}", status, text),
-                Err(e) => println!("Failed to read error text: {}", e)
+                Ok(text) => info!("Token request failed ({}): {}", status, text),
+                Err(e) => info!("Failed to read error text: {}", e)
             }
         }
     };
