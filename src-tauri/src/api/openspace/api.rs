@@ -7,6 +7,7 @@ use crate::ipc::pub_ipc_response::IpcStatus;
 use reqwest::{Client, Method};
 use serde_json::{from_value, Value};
 use std::sync::LazyLock;
+use std::time::Duration;
 
 static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
@@ -40,6 +41,7 @@ impl OSApi {
             .map_err(|e| AppError::InvalidArgument(format!("Invalid HTTP method: {}", e)))?;
         let response = API_CLIENT
             .request(method, &url)
+            .timeout(Duration::from_secs(30))
             .header(
                 "Authorization",
                 format!("{} {}", self.token_type, self.access_token),

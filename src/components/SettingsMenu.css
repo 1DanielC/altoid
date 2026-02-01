@@ -1,0 +1,408 @@
+/* ---------- Overlay ---------- */
+.settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* ---------- Menu Container ---------- */
+.settings-menu {
+  background: #fff;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- Header ---------- */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.settings-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.settings-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* ---------- Content ---------- */
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+/* ---------- Section ---------- */
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-header h3 {
+  margin-bottom: 0;
+}
+
+/* ---------- Profile ---------- */
+.profile-info {
+  background: #f8f8f8;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.profile-row {
+  display: flex;
+  padding: 8px 0;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profile-row:first-child {
+  padding-top: 0;
+}
+
+.profile-label {
+  flex-shrink: 0;
+  width: 80px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #888;
+}
+
+.profile-value {
+  font-size: 13px;
+  color: #333;
+}
+
+.profile-empty {
+  font-size: 13px;
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  padding: 8px;
+}
+
+/* ---------- Host Override ---------- */
+.host-override-group {
+  background: #f8f8f8;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.host-override-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.host-override-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.host-override-input {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+}
+
+.host-override-input:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.host-override-input::placeholder {
+  color: #999;
+}
+
+.host-save-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  background: #2196F3;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.host-save-btn:hover:not(:disabled) {
+  background: #1976D2;
+}
+
+.host-save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.host-save-btn.saved {
+  background: #4CAF50;
+}
+
+.host-save-btn.error {
+  background: #f44336;
+}
+
+.host-override-hint {
+  margin: 8px 0 0 0;
+  font-size: 11px;
+  color: #999;
+}
+
+/* ---------- Activity Log ---------- */
+.activity-log-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  background: #f8f8f8;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.activity-log-btn:hover {
+  background: #f0f0f0;
+  border-color: #d0d0d0;
+}
+
+.log-badges {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.log-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 8px;
+  color: #fff;
+}
+
+.badge-error {
+  background: #f44336;
+}
+
+.badge-warning {
+  background: #FF9800;
+}
+
+.log-clear-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.log-clear-btn:hover {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
+.log-content {
+  background: #f8f8f8;
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.log-empty {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  padding: 20px;
+  font-style: italic;
+}
+
+/* ---------- Log Entry ---------- */
+.log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.log-entry:last-of-type {
+  border-bottom: none;
+}
+
+.entry-info {
+  background: #f0f7ff;
+  border-left: 3px solid #2196F3;
+}
+
+.entry-warning {
+  background: #fffbf0;
+  border-left: 3px solid #FF9800;
+}
+
+.entry-error {
+  background: #fff5f5;
+  border-left: 3px solid #f44336;
+}
+
+.entry-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.entry-icon-spacer {
+  flex-shrink: 0;
+  width: 16px;
+}
+
+.icon-info {
+  background: #2196F3;
+}
+
+.icon-warning {
+  background: #FF9800;
+}
+
+.icon-error {
+  background: #f44336;
+}
+
+.entry-time {
+  flex-shrink: 0;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #999;
+}
+
+.entry-message {
+  color: #555;
+  word-break: break-word;
+}
+
+/* ---------- Footer ---------- */
+.settings-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.hotkey-hint {
+  font-size: 11px;
+  color: #999;
+}
+
+.hotkey-hint kbd {
+  display: inline-block;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  background: #f0f0f0;
+  border: 1px solid #d0d0d0;
+  border-radius: 3px;
+  margin: 0 2px;
+}
+
+/* ---------- Scrollbar ---------- */
+.log-content::-webkit-scrollbar,
+.settings-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.log-content::-webkit-scrollbar-track,
+.settings-content::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+
+.log-content::-webkit-scrollbar-thumb,
+.settings-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.log-content::-webkit-scrollbar-thumb:hover,
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}

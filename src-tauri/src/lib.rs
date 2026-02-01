@@ -2,7 +2,7 @@ use crate::api::oauth::auth::authenticate_user;
 use crate::api::openspace::api::{get_user_info, make_request};
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::cache::file_cache::clear_skipped_files;
-use crate::cache::user_cache::{clear_user_config, get_user_config};
+use crate::cache::user_cache::{clear_user_config, get_host_override, get_user_config, set_host_override};
 use crate::error::AppError;
 use crate::ipc::pub_ipc_response::ToIpcResponse;
 use crate::traits::traits::ToJson;
@@ -35,7 +35,7 @@ async fn get_user() -> Result<UserInfo, Value> {
 }
 
 #[tauri::command]
-async fn clear_cache() -> Result<(), Value> {
+async fn clear_cache as other___cmd__clear_cache() -> Result<(), Value> {
     println!("Clearing cache");
     clear_user_config()
         .and_then(|_| clear_skipped_files())
@@ -66,16 +66,29 @@ async fn get_camera_files() -> Result<(), Value> {
     Ok(())
 }
 
+#[tauri::command]
+fn get_host() -> Option<String> {
+    get_host_override()
+}
+
+#[tauri::command]
+fn set_host(host: Option<String>) -> Result<(), Value> {
+    set_host_override(host).map_err(|e: AppError| err_response(e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             get_user,
             req,
             get_camera,
             get_camera_files,
             clear_cache,
+            get_host,
+            set_host,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

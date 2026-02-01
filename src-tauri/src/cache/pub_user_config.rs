@@ -33,4 +33,8 @@ impl ApiConfig {
     pub fn host(&self) -> &str {
         self.host.as_deref().unwrap_or(self.env.get_host())
     }
+
+    pub fn set_host(&mut self, host: Option<String>) {
+        self.host = host;
+    }
 }

@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { getUser } from '../../contexts/services/ApiService';
-import { UserInfo } from '../../rust-api/model/AuthResult';
+import {useQuery} from '@tanstack/react-query';
+import {UserInfo} from '../../rust-api/model/AuthResult';
+import {getUser} from "../../contexts/services/ApiService.ts";
 
 export const USER_QUERY_KEY = ['user'] as const;
 
@@ -9,7 +9,7 @@ export function useUserQuery() {
     queryKey: USER_QUERY_KEY,
     queryFn: async () => {
       try {
-        return await getUser();
+        return getUser();
       } catch (error) {
         // If user not authenticated, return null instead of throwing
         console.log('User not authenticated:', error);
