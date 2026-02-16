@@ -1,14 +1,14 @@
 use crate::api::oauth::pkg_auth::{
-    DeviceCodeRequest, DeviceCodeResponse, TokenRequest, TokenResponse,
+    AuthEnv, DeviceCodeRequest, DeviceCodeResponse, TokenRequest, TokenResponse,
 };
-use crate::cache::oauth_cache;
-use crate::cache::pub_user_config::UserConfig;
-use crate::cache::user_cache::{get_user_config, save_user_config};
+use crate::api::openspace::pub_api_env::ApiEnv;
 use crate::error::AppError;
+use crate::state::{ApiConfig, UserConfig};
 use reqwest::Client;
 use std::sync::LazyLock;
 use std::time::Duration;
 use tauri_plugin_log::log::{error, info};
+use crate::APP_STATE;
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
@@ -17,9 +17,9 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .expect("Failed to create HTTP client")
 });
 
-pub async fn authenticate_user() -> Result<UserConfig, AppError> {
-    let login_config = oauth_cache::get_oauth_config()
-        .ok_or(AppError::OAuthConfigNotFound)?;
+pub async fn authenticate_user() -> Result<(), AppError> {
+    let login_config = APP_STATE.get().unwrap().get_auth_config()
+        .ok_or(AppError::auth_failed("Cannot authenticate"))?;
 
     let auth_url = login_config.env.get_auth_url();
     let token_url = login_config.env.get_token_url();
@@ -40,7 +40,7 @@ pub async fn authenticate_user() -> Result<UserConfig, AppError> {
         .await?
         .json()
         .await
-        .map_err(|e| AppError::ApiParseFailed(e.to_string()))?;
+        .map_err(|e| AppError::api_parse_failed("Failed to parse device code response", e))?;
 
     info!(
         "Device code received. User code: {}",
@@ -89,7 +89,7 @@ pub async fn authenticate_user() -> Result<UserConfig, AppError> {
             let token_response: TokenResponse = response
                 .json()
                 .await
-                .map_err(|e| AppError::ApiParseFailed(e.to_string()))?;
+                .map_err(|e| AppError::api_parse_failed("Failed to parse token response", e))?;
             break token_response;
         } else {
             // Check for authorization_pending or slow_down errors (expected during polling)
@@ -103,12 +103,22 @@ pub async fn authenticate_user() -> Result<UserConfig, AppError> {
         }
     };
 
-    save_user_config(
-        token_response.access_token.clone(),
-        token_response.token_type.clone(),
-    )?;
+    // Build UserConfig from the token response
+    let api_env = match login_config.env {
+        AuthEnv::Prod => ApiEnv::US,
+        AuthEnv::Dev => ApiEnv::Dev,
+    };
 
-    Ok(get_user_config().ok_or_else(|| AppError::Internal("Failed to get user config after authentication".to_string()))?)
+    let user_config = UserConfig {
+        access_token: token_response.access_token,
+        token_type: token_response.token_type,
+        api_config: ApiConfig::new(api_env, None),
+    };
+
+    APP_STATE.get().unwrap().set_user_config(user_config)?;
+    info!("Authentication successful, user config saved");
+
+    Ok(())
 }
 
 pub fn get_user_initials(full_name: Option<String>) -> String {

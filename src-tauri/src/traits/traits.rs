@@ -1,5 +1,4 @@
-use serde::{Deserialize, Serialize};
-use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::{Error, Value};
 
 /// converts any serializable type to a json value

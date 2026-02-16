@@ -1,12 +1,10 @@
-import {logError, logInfo, logWarning} from "../services/log.ts";
+import {getUser} from "../contexts/services/ApiService.ts";
 export default function TestButton() {
   return (
       <button
           className="button"
           onClick={() => {
-            logInfo("POOP")
-            logWarning("SCOOP")
-            logError("DOOP")
+            getUser().then(r => console.log(r))
           }}
       >
         Test Button

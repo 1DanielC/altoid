@@ -17,6 +17,10 @@
 //! In rare cases where the status code must be explicitly set
 //! (e.g., treating a 401 as success with None), use `IpcError`.
 //! This prevents double-wrapping at the command boundary.
+//!
+//! ## Error Chaining
+//! Most error variants capture their source error via `#[source]`, enabling
+//! full error chain traversal and stack traces when logging with `{:?}`.
 
 use crate::ipc::pub_ipc_response::IpcStatus;
 use thiserror::Error;
@@ -27,8 +31,12 @@ pub enum AppError {
     #[error("OAuth configuration not found. Please run login first.")]
     OAuthConfigNotFound,
 
-    #[error("Authentication failed: {0}")]
-    AuthenticationFailed(String),
+    #[error("Authentication failed: {message}")]
+    AuthenticationFailed {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
     #[error("Device code expired. Please try again.")]
     DeviceCodeExpired,
@@ -43,8 +51,12 @@ pub enum AppError {
     #[error("API not initialized. Please authenticate first.")]
     ApiNotInitialized,
 
-    #[error("Failed to parse API response: {0}")]
-    ApiParseFailed(String),
+    #[error("Failed to parse API response: {message}")]
+    ApiParseFailed {
+        message: String,
+        #[source]
+        source: reqwest::Error,
+    },
 
     // Cache errors
     #[error("Failed to read cache file '{file}': {source}")]
@@ -71,15 +83,19 @@ pub enum AppError {
     #[error("Camera unavailable (possibly claimed by another app)")]
     CameraUnavailable,
 
-    #[error("Camera operation failed: {0}")]
-    CameraOperation(String),
+    #[error("Camera operation failed: {message}")]
+    CameraOperation {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
-    #[error("Unsupported OS: {0}")]
-    UnsupportedOS(String),
-
-    // Upload errors
-    #[error("Upload failed: {0}")]
-    UploadFailed(String),
+    #[error("Resource conflict: {message}")]
+    Conflict {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
     // Network errors
     #[error("Network request failed: {0}")]
@@ -88,23 +104,183 @@ pub enum AppError {
     #[error("Network timeout")]
     NetworkTimeout,
 
-    // Serialization errors
-    #[error("JSON serialization failed: {0}")]
-    JsonSerialization(#[from] serde_json::Error),
-
     // I/O errors
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    // URL parsing errors
+    #[error("URL parse error: {message}")]
+    UrlParse {
+        message: String,
+        #[source]
+        source: url::ParseError,
+    },
+
     // Generic errors with context
-    #[error("Invalid argument: {0}")]
-    InvalidArgument(String),
+    #[error("Invalid argument: {message}")]
+    InvalidArgument {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
-    #[error("Resource conflict: {0}")]
-    Conflict(String),
+    #[error("Internal error: {message}")]
+    Internal {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
-    #[error("Internal error: {0}")]
-    Internal(String),
+    #[error("Could not acquire lock for resource")]
+    LockingError,
+
+    // Serialization errors
+    #[error("JSON serialization failed: {0}")]
+    JsonSerialization(#[from] serde_json::Error),
+
+    #[error("Unsupported OS: {0}")]
+    UnsupportedOS(String),
+
+    // Upload errors
+    #[error("Upload failed: {message}")]
+    UploadFailed {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+}
+
+// Helper constructors for ergonomic error creation
+impl AppError {
+    /// Create an AuthenticationFailed error without a source
+    pub fn auth_failed(message: impl Into<String>) -> Self {
+        Self::AuthenticationFailed {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create an AuthenticationFailed error with a source
+    pub fn auth_failed_with<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::AuthenticationFailed {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create an Internal error without a source
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::Internal {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create an Internal error with a source
+    pub fn internal_with<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::Internal {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create an InvalidArgument error without a source
+    pub fn invalid_arg(message: impl Into<String>) -> Self {
+        Self::InvalidArgument {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create an InvalidArgument error with a source
+    pub fn invalid_arg_with<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::InvalidArgument {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create a UrlParse error
+    pub fn url_parse(message: impl Into<String>, source: url::ParseError) -> Self {
+        Self::UrlParse {
+            message: message.into(),
+            source,
+        }
+    }
+
+    /// Create an ApiParseFailed error
+    pub fn api_parse_failed(message: impl Into<String>, source: reqwest::Error) -> Self {
+        Self::ApiParseFailed {
+            message: message.into(),
+            source,
+        }
+    }
+
+    /// Create a CameraOperation error without a source
+    pub fn camera_op(message: impl Into<String>) -> Self {
+        Self::CameraOperation {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create a CameraOperation error with a source
+    pub fn camera_op_with<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::CameraOperation {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create an UploadFailed error without a source
+    pub fn upload_failed(message: impl Into<String>) -> Self {
+        Self::UploadFailed {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create an UploadFailed error with a source
+    pub fn upload_failed_with<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::UploadFailed {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create a Conflict error without a source
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::Conflict {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create a Conflict error with a source
+    pub fn conflict_with<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::Conflict {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
 }
 
 impl AppError {
@@ -117,7 +293,7 @@ impl AppError {
             // Authentication/Authorization
             Self::NotAuthenticated
             | Self::OAuthConfigNotFound
-            | Self::AuthenticationFailed(_)
+            | Self::AuthenticationFailed { .. }
             | Self::DeviceCodeExpired => IpcStatus::NotAuthenticated,
 
             // API errors with status codes
@@ -136,10 +312,10 @@ impl AppError {
             Self::CacheNotFound(_) | Self::CameraNotFound => IpcStatus::NotFound,
 
             // Validation errors
-            Self::InvalidArgument(_) => IpcStatus::InvalidArgument,
+            Self::InvalidArgument { .. } => IpcStatus::InvalidArgument,
 
             // Conflict errors
-            Self::Conflict(_) => IpcStatus::Conflict,
+            Self::Conflict { .. } => IpcStatus::Conflict,
 
             // Unavailable errors
             Self::ApiNotInitialized | Self::CameraUnavailable | Self::NetworkTimeout => {

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 #[strum(serialize_all = "lowercase")]
 pub enum ApiEnv {
     Local,
+    EphDev,
     Dev,
     CAN,
     EU,
@@ -30,6 +31,7 @@ impl ApiEnv {
     pub fn get_host(&self) -> &'static str {
         match self {
             ApiEnv::Local => "http://localhost:8080",
+            ApiEnv::Dev => "https://development.osdevenv.net",
             ApiEnv::CAN => "https://can.openspace.ai",
             ApiEnv::EU => "https://eu.openspace.ai",
             ApiEnv::GOV => "https://gov.openspace.ai",
@@ -42,9 +44,4 @@ impl ApiEnv {
             _ => panic!("Invalid API environment: {:?}", self),
         }
     }
-}
-
-// Public function to get the API host for the default environment
-pub fn get_api_host() -> &'static str {
-    ApiEnv::Local.get_host()
 }
