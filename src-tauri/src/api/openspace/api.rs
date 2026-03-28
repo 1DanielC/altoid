@@ -1,11 +1,14 @@
 use crate::api::http::client::create_http_client;
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::error::AppError;
-use reqwest::{Client, Method};
+use futures_util::StreamExt;
+use reqwest::{Body, Client, Method};
 use serde_json::{from_value, Value};
 use std::sync::LazyLock;
 use std::time::Duration;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_log::log::info;
+use tokio_util::io::ReaderStream;
 use url::Url;
 use crate::APP_STATE;
 
@@ -75,22 +78,38 @@ pub async fn make_request(
 
     Ok(json)
 }
-/// Read file bytes - handles both local filesystem and PTP cameras.
-pub async fn read_file_bytes(file_path: &str, mount_point: &str) -> Result<Vec<u8>, AppError> {
+/// Resolve the local file path for a camera file.
+/// For PTP cameras, downloads via gphoto2 to a temp file first.
+/// Returns (local_path, file_size, is_temp) - caller should clean up temp files.
+pub async fn resolve_local_file(
+    file_path: &str,
+    mount_point: &str,
+    filename: &str,
+    app: &AppHandle,
+) -> Result<(std::path::PathBuf, u64, bool), AppError> {
     if mount_point == "PTP" {
-        download_ptp_file(file_path).await
+        let local_path = download_ptp_file_to_disk(file_path, filename, app).await?;
+        let size = tokio::fs::metadata(&local_path).await
+            .map_err(|e| AppError::internal(&format!("Failed to stat temp file: {}", e)))?
+            .len();
+        Ok((local_path, size, true))
     } else {
-        let full_path = format!("{}/{}", mount_point, file_path);
-        tokio::fs::read(&full_path).await
-            .map_err(|e| AppError::internal(&format!("Failed to read file {}: {}", full_path, e)))
+        let full_path = std::path::PathBuf::from(format!("{}/{}", mount_point, file_path));
+        let size = tokio::fs::metadata(&full_path).await
+            .map_err(|e| AppError::internal(&format!("Failed to stat file {}: {}", full_path.display(), e)))?
+            .len();
+        Ok((full_path, size, false))
     }
 }
 
-/// Upload raw bytes to an existing upload via PUT /api/desktop-client/uploads/{uploadId}.
-pub async fn upload_bytes_to_server(
+/// Stream a file from disk to the server with progress events.
+pub async fn upload_file_streaming(
     upload_id: &str,
+    local_path: &std::path::Path,
+    file_size: u64,
     content_type: &str,
-    file_bytes: Vec<u8>,
+    filename: &str,
+    app: &AppHandle,
 ) -> Result<(), AppError> {
     let state = APP_STATE
         .get()
@@ -110,23 +129,46 @@ pub async fn upload_bytes_to_server(
     let url = base.join(&path)
         .map_err(|e| AppError::url_parse(format!("Could not build url: {}", path), e))?;
 
-    let file_size = file_bytes.len();
     let content_range = if file_size > 0 {
         format!("bytes 0-{}/{}", file_size - 1, file_size)
     } else {
         "bytes 0-0/0".to_string()
     };
 
-    info!("Uploading {} bytes to {} (Content-Range: {})", file_size, url, content_range);
+    info!("Streaming upload: {} bytes to {} (Content-Range: {})", file_size, url, content_range);
+
+    // Open file and create a progress-tracking stream
+    let file = tokio::fs::File::open(local_path).await
+        .map_err(|e| AppError::internal(&format!("Failed to open file: {}", e)))?;
+
+    let reader_stream = ReaderStream::with_capacity(file, 256 * 1024); // 256KB chunks
+    let mut bytes_sent: u64 = 0;
+    let app_clone = app.clone();
+    let filename_owned = filename.to_string();
+
+    let progress_stream = reader_stream.map(move |chunk| {
+        if let Ok(ref bytes) = chunk {
+            bytes_sent += bytes.len() as u64;
+            let _ = app_clone.emit("file-progress", serde_json::json!({
+                "filename": filename_owned,
+                "stage": "uploading",
+                "bytes": bytes_sent,
+                "total": file_size,
+            }));
+        }
+        chunk
+    });
+
+    let body = Body::wrap_stream(progress_stream);
 
     let response = API_CLIENT
         .put(url)
-        .timeout(Duration::from_secs(300))
         .header("Authorization", format!("{} {}", user_config.token_type, user_config.access_token))
         .header("User-Agent", USER_AGENT)
         .header("Content-Type", content_type)
-        .header("Content-Range", content_range)
-        .body(file_bytes)
+        .header("Content-Range", &content_range)
+        .header("Content-Length", file_size)
+        .body(body)
         .send()
         .await?;
 
@@ -155,48 +197,89 @@ async fn kill_ptpcamera() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 }
 
-/// Download a file from the camera via gphoto2 PTP, returning the bytes.
-/// Retries once after killing PTPCamera if USB claim fails.
-async fn download_ptp_file(camera_path: &str) -> Result<Vec<u8>, AppError> {
-    info!("Downloading PTP file: {}", camera_path);
+/// Download a file from the camera via gphoto2 PTP to a temp file on disk.
+/// Emits progress events by polling the temp file size during download.
+/// Returns the path to the temp file (caller is responsible for cleanup).
+async fn download_ptp_file_to_disk(
+    camera_path: &str,
+    filename: &str,
+    app: &AppHandle,
+) -> Result<std::path::PathBuf, AppError> {
+    info!("Downloading PTP file to disk: {}", camera_path);
 
     let temp_dir = std::env::temp_dir().join("altoid_ptp");
     tokio::fs::create_dir_all(&temp_dir).await
         .map_err(|e| AppError::internal(&format!("Failed to create temp dir: {}", e)))?;
 
-    let filename = std::path::Path::new(camera_path)
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    let temp_file = temp_dir.join(&filename);
+    let temp_file = temp_dir.join(filename);
 
     let folder = std::path::Path::new(camera_path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "/".to_string());
 
-    // Try up to 2 times: first attempt, then retry after killing PTPCamera
+    let gphoto_filename = std::path::Path::new(camera_path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
     for attempt in 0..2 {
-        let output = tokio::process::Command::new("gphoto2")
+        let _ = tokio::fs::remove_file(&temp_file).await;
+
+        let mut child = tokio::process::Command::new("gphoto2")
             .args([
                 "--folder", &folder,
-                "--get-file", &filename,
+                "--get-file", &gphoto_filename,
                 "--filename", &temp_file.to_string_lossy(),
                 "--force-overwrite",
             ])
-            .output()
-            .await
-            .map_err(|e| AppError::internal(&format!("Failed to run gphoto2: {}", e)))?;
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| AppError::internal(&format!("Failed to spawn gphoto2: {}", e)))?;
+
+        // gphoto2 buffers internally, so the temp file grows in bursts.
+        // Poll it for whatever progress we can show.
+        let temp_file_clone = temp_file.clone();
+        let app_clone = app.clone();
+        let filename_owned = filename.to_string();
+        let poll_handle = tokio::spawn(async move {
+            let mut last_size: u64 = 0;
+            loop {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                if let Ok(meta) = tokio::fs::metadata(&temp_file_clone).await {
+                    let size = meta.len();
+                    if size != last_size {
+                        last_size = size;
+                        let _ = app_clone.emit("file-progress", serde_json::json!({
+                            "filename": filename_owned,
+                            "stage": "downloading",
+                            "bytes": size,
+                            "total": 0,
+                        }));
+                    }
+                }
+            }
+        });
+
+        let output = child.wait_with_output().await
+            .map_err(|e| AppError::internal(&format!("gphoto2 process error: {}", e)))?;
+
+        poll_handle.abort();
 
         if output.status.success() {
+            // Emit final progress with actual file size
+            if let Ok(meta) = tokio::fs::metadata(&temp_file).await {
+                let _ = app.emit("file-progress", serde_json::json!({
+                    "filename": filename,
+                    "stage": "downloading",
+                    "bytes": meta.len(),
+                    "total": 0,
+                }));
+            }
             info!("Downloaded PTP file to {}", temp_file.display());
-
-            let bytes = tokio::fs::read(&temp_file).await
-                .map_err(|e| AppError::internal(&format!("Failed to read temp file: {}", e)))?;
-
-            let _ = tokio::fs::remove_file(&temp_file).await;
-            return Ok(bytes);
+            return Ok(temp_file);
         }
 
         let stderr = String::from_utf8_lossy(&output.stderr);

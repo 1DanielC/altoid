@@ -164,45 +164,51 @@ async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, V
 }
 
 /// Combined create-and-upload command for a single file.
-/// For PTP cameras, downloads the file first to get the real size,
-/// then creates the upload with the correct size, then uploads the bytes.
+/// Downloads to disk first (with progress), creates upload with real size,
+/// then streams the upload with progress events.
 #[tauri::command]
 async fn upload_file(
+    app: tauri::AppHandle,
     device_id: String,
     file_path: String,
     filename: String,
     mount_point: String,
     content_type: String,
 ) -> Result<Value, Value> {
-    use crate::api::openspace::api::{read_file_bytes, upload_bytes_to_server};
+    use crate::api::openspace::api::{resolve_local_file, upload_file_streaming};
 
     info!("Upload file: {} (mount: {})", file_path, mount_point);
 
-    // Step 1: Read the file bytes (handles PTP vs mass storage)
-    let file_bytes = read_file_bytes(&file_path, &mount_point)
-        .await
-        .map_err(|e| err_response(e))?;
+    // Step 1: Resolve to a local file (downloads from PTP if needed, with progress)
+    let (local_path, file_size, is_temp) = resolve_local_file(
+        &file_path, &mount_point, &filename, &app,
+    )
+    .await
+    .map_err(|e| err_response(e))?;
 
-    let real_size = file_bytes.len() as i64;
-    info!("File {} real size: {} bytes", filename, real_size);
+    info!("File {} resolved: {} ({} bytes)", filename, local_path.display(), file_size);
 
     // Step 2: Create the upload with the real file size
     let body = serde_json::json!({
         "deviceId": device_id,
         "deviceFilename": filename,
         "contentType": content_type,
-        "size": real_size,
+        "size": file_size as i64,
     });
 
     let create_response = make_request("POST", "/api/desktop-client/uploads", body, None)
         .await
-        .map_err(|e| err_response(e))?;
+        .map_err(|e| {
+            if is_temp { let _ = std::fs::remove_file(&local_path); }
+            err_response(e)
+        })?;
 
     let upload_id = create_response["uploadId"].as_str();
     let status = create_response["status"].as_str().unwrap_or("Pending");
 
     if status == "Completed" || upload_id.is_none() {
         info!("File {} already uploaded (status: {})", filename, status);
+        if is_temp { let _ = std::fs::remove_file(&local_path); }
         return Ok(serde_json::json!({
             "filename": filename,
             "status": "Completed",
@@ -210,18 +216,24 @@ async fn upload_file(
         }));
     }
 
-    let upload_id = upload_id.unwrap();
+    let upload_id_str = upload_id.unwrap().to_string();
 
-    // Step 3: Upload the bytes
-    upload_bytes_to_server(upload_id, &content_type, file_bytes)
-        .await
-        .map_err(|e| err_response(e))?;
+    // Step 3: Stream the upload with progress events
+    let result = upload_file_streaming(
+        &upload_id_str, &local_path, file_size, &content_type, &filename, &app,
+    )
+    .await;
+
+    // Clean up temp file
+    if is_temp { let _ = tokio::fs::remove_file(&local_path).await; }
+
+    result.map_err(|e| err_response(e))?;
 
     info!("File {} uploaded successfully", filename);
     Ok(serde_json::json!({
         "filename": filename,
         "status": "Uploaded",
-        "uploadId": upload_id,
+        "uploadId": upload_id_str,
     }))
 }
 

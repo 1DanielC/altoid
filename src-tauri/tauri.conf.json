@@ -14,12 +14,12 @@
       {
         "label": "main",
         "title": "OpenSpace Desktop Sync",
-        "width": 400,
-        "height": 600,
-        "minWidth": 250,
-        "minHeight": 250,
-        "maxWidth": 400,
-        "maxHeight": 600,
+        "width": 500,
+        "height": 700,
+        "minWidth": 350,
+        "minHeight": 350,
+        "maxWidth": 500,
+        "maxHeight": 700,
         "resizable": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true

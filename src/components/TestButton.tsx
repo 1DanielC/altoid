@@ -1,7 +1,16 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCamera, uploadFile, CameraResult } from "../contexts/services/CameraService.ts";
 import { request } from "../contexts/services/ApiService.ts";
+import { logError } from "../services/log.ts";
 import UploadTable, { UploadEntry } from "./UploadTable.tsx";
+
+interface FileProgress {
+  filename: string;
+  stage: "downloading" | "uploading";
+  bytes: number;
+  total: number;
+}
 
 export default function TestButton() {
   const [result, setResult] = useState<string | null>(null);
@@ -32,6 +41,21 @@ export default function TestButton() {
     ));
   }, []);
 
+  // Listen for file progress events from Rust
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    listen<FileProgress>("file-progress", (event) => {
+      const { filename, stage, bytes, total } = event.payload;
+      updateUpload(filename, {
+        status: stage === "downloading" ? "downloading" : "in_progress",
+        bytes,
+        ...(total > 0 ? { totalBytes: total } : {}),
+      });
+    }).then(fn => { unlisten = fn; });
+
+    return () => { unlisten?.(); };
+  }, [updateUpload]);
 
   const handleUploadFiles = async () => {
     setLoading("uploading");
@@ -49,27 +73,33 @@ export default function TestButton() {
       filename: f.filename,
       uploadId: null,
       status: 'waiting' as const,
-      progress: 0,
+      bytes: 0,
+      totalBytes: f.size,
     })));
 
     // Process one at a time, top to bottom
     for (const file of files) {
-      updateUpload(file.filename, { status: 'in_progress', progress: 50 });
+      updateUpload(file.filename, { status: 'downloading', bytes: 0 });
 
       try {
         const r = await uploadFile(deviceId, file.path, file.filename, mountPoint, file.content_type);
 
         updateUpload(file.filename, {
           uploadId: r.uploadId ?? null,
-          status: r.status === 'Completed' || r.status === 'Uploaded' ? 'uploaded' : 'new',
-          progress: r.status === 'Completed' || r.status === 'Uploaded' ? 100 : 0,
+          status: r.status === 'Completed' || r.status === 'Uploaded' ? 'uploaded' : 'waiting',
+          bytes: file.size,
+          totalBytes: file.size,
         });
       } catch (e: unknown) {
         const msg = typeof e === 'string' ? e
           : e instanceof Error ? e.message
           : JSON.stringify(e);
-        updateUpload(file.filename, { status: 'new', progress: 0 });
-        console.error(`Upload failed for ${file.filename}: ${msg}`);
+        updateUpload(file.filename, {
+          status: 'error',
+          error: msg,
+          bytes: 0,
+        });
+        logError(`Upload failed for ${file.filename}: ${msg}`);
       }
     }
 
@@ -109,7 +139,7 @@ export default function TestButton() {
           <span>{
             loading === "camera" ? "Scanning for cameras..." :
             loading === "api" ? "Contacting server..." :
-            loading === "uploading" ? "Uploading files..." :
+            loading === "uploading" ? "Preparing uploads..." :
             "Working..."
           }</span>
         </div>
