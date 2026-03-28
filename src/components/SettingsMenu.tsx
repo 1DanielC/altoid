@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useUserQuery } from '../contexts/AppContext';
+import { useUserQuery, useLoginMutation, useLogoutMutation } from '../contexts/AppContext';
 import { getLogEntries } from '../services/log';
 import { getHostOverride, setHostOverride } from '../contexts/services/ApiService';
 import './SettingsMenu.css';
@@ -43,27 +43,52 @@ async function openActivityLog() {
   }
 }
 
-export default function SettingsMenu() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [hostOverride, setHostOverrideState] = useState<string>('');
+interface SettingsMenuProps {
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+}
+
+const ENV_OPTIONS = [
+  { label: 'Production', value: 'https://openspace.ai' },
+  { label: 'Development', value: 'https://development.osdevenv.net' },
+  { label: 'Local', value: 'http://localhost:8080' },
+];
+
+export default function SettingsMenu({ isOpen, setIsOpen }: SettingsMenuProps) {
+  const [selectedHost, setSelectedHost] = useState<string>('https://openspace.ai');
+  const [savedHost, setSavedHost] = useState<string>('https://openspace.ai');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [hostSaveStatus, setHostSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const { data: user } = useUserQuery();
+  const loginMutation = useLoginMutation();
+  const logoutMutation = useLogoutMutation();
 
-  // Load host override when menu opens
+  // Load current host when menu opens
   useEffect(() => {
     if (isOpen) {
       getHostOverride().then(host => {
-        setHostOverrideState(host || '');
+        const current = host || 'https://openspace.ai';
+        setSelectedHost(current);
+        setSavedHost(current);
       }).catch(() => {
-        setHostOverrideState('');
+        setSelectedHost('https://openspace.ai');
+        setSavedHost('https://openspace.ai');
       });
     }
   }, [isOpen]);
 
-  const handleHostSave = async () => {
+  const handleHostSave = () => {
+    if (selectedHost === savedHost) return;
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSwitch = async () => {
+    setShowConfirmModal(false);
     setHostSaveStatus('saving');
     try {
-      await setHostOverride(hostOverride.trim() || null);
+      await setHostOverride(selectedHost);
+      setSavedHost(selectedHost);
+      logoutMutation.mutate();
       setHostSaveStatus('saved');
       setTimeout(() => setHostSaveStatus('idle'), 2000);
     } catch {
@@ -77,7 +102,7 @@ export default function SettingsMenu() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        setIsOpen(prev => !prev);
+        setIsOpen(!isOpen);
       }
     };
 
@@ -128,44 +153,76 @@ export default function SettingsMenu() {
                       <span className="profile-value">{user.fullName}</span>
                     </div>
                   )}
+                  <button
+                    className="auth-btn sign-out-btn"
+                    onClick={() => logoutMutation.mutate()}
+                    disabled={logoutMutation.isPending}
+                  >
+                    {logoutMutation.isPending ? 'Signing out...' : 'Sign Out'}
+                  </button>
                 </>
               ) : (
-                <div className="profile-empty">Not logged in</div>
+                <>
+                  <div className="profile-empty">Not logged in</div>
+                  <button
+                    className="auth-btn sign-in-btn"
+                    onClick={() => loginMutation.mutate({ clearAuth: false })}
+                    disabled={loginMutation.isPending}
+                  >
+                    {loginMutation.isPending ? 'Signing in...' : 'Sign In'}
+                  </button>
+                </>
               )}
             </div>
           </section>
 
-          {/* Host Override Section */}
+          {/* Environment Section */}
           <section className="settings-section">
-            <h3>API Configuration</h3>
-            <div className="host-override-group">
-              <label className="host-override-label" htmlFor="host-override">
-                Host Override
-              </label>
-              <div className="host-override-input-row">
-                <input
-                  id="host-override"
-                  type="text"
-                  className="host-override-input"
-                  placeholder="e.g., https://custom.openspace.ai"
-                  value={hostOverride}
-                  onChange={(e) => setHostOverrideState(e.target.value)}
-                />
+            <h3>Environment</h3>
+            <div className="env-group">
+              <select
+                id="env-select"
+                className="env-select"
+                value={selectedHost}
+                onChange={(e) => setSelectedHost(e.target.value)}
+              >
+                {ENV_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <span className="env-host-hint">{selectedHost}</span>
+              {selectedHost !== savedHost && (
                 <button
-                  className={`host-save-btn ${hostSaveStatus}`}
+                  className={`auth-btn confirm-switch-btn`}
                   onClick={handleHostSave}
                   disabled={hostSaveStatus === 'saving'}
                 >
-                  {hostSaveStatus === 'saving' ? 'Saving...' :
-                   hostSaveStatus === 'saved' ? 'Saved' :
-                   hostSaveStatus === 'error' ? 'Error' : 'Save'}
+                  {hostSaveStatus === 'saving' ? 'Switching...' : 'Switch Environment'}
                 </button>
-              </div>
-              <p className="host-override-hint">
-                Leave empty to use the default host. Requires restart to take effect.
-              </p>
+              )}
             </div>
           </section>
+
+          {/* Confirm Environment Switch Modal */}
+          {showConfirmModal && (
+            <div className="confirm-modal-overlay" onClick={() => setShowConfirmModal(false)}>
+              <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+                <h3>Switch Environment?</h3>
+                <p>
+                  Switching to a different environment will log you out and all local data will be lost.
+                  You will need to sign in again.
+                </p>
+                <div className="confirm-modal-actions">
+                  <button className="auth-btn sign-out-btn" onClick={() => setShowConfirmModal(false)}>
+                    Cancel
+                  </button>
+                  <button className="auth-btn confirm-switch-btn" onClick={handleConfirmSwitch}>
+                    Switch Environment
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Activity Log Section */}
           <section className="settings-section">

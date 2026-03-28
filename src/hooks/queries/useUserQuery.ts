@@ -16,7 +16,8 @@ export function useUserQuery() {
         return null;
       }
     },
-    // Automatically fetch on mount (replaces UserContext useEffect)
     staleTime: 5 * 60 * 1000,
+    // Do not automatically fetch on mount - user must sign in explicitly
+    enabled: false,
   });
 }

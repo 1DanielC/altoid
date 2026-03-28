@@ -53,7 +53,7 @@ export async function getUser(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<U
 export async function logout(timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<void> {
   try {
     return await withTimeout(
-      invoke("clear_user_cache"),
+      invoke("clear_state"),
       timeoutMs,
       `Request timeout: logout took longer than ${timeoutMs}ms`
     );

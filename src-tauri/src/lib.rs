@@ -83,6 +83,28 @@ async fn get_camera_files() -> Result<(), Value> {
     Ok(())
 }
 
+#[tauri::command]
+async fn get_host() -> Result<Option<String>, Value> {
+    let state = APP_STATE
+        .get()
+        .ok_or(err_response(AppError::internal("App not initialized")))?;
+
+    Ok(state.get_host_override())
+}
+
+#[tauri::command]
+async fn set_host(host: Option<String>) -> Result<(), Value> {
+    let state = APP_STATE
+        .get()
+        .ok_or(err_response(AppError::internal("App not initialized")))?;
+
+    state
+        .set_host_override(host)
+        .map_err(|e| err_response(e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let timestamp = Local::now().format("%Y-%m-%d");
@@ -117,6 +139,8 @@ pub fn run() {
             get_camera,
             get_camera_files,
             clear_state,
+            get_host,
+            set_host,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

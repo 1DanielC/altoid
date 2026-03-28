@@ -14,6 +14,7 @@ pub struct AppState {
     user_config: Mutex<Option<UserConfig>>,
     auth_config: Mutex<Option<OAuthConfig>>,
     skipped_files: Mutex<Option<Vec<SkippedFile>>>,
+    host_override: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -22,12 +23,14 @@ impl AppState {
         let user_config = Mutex::new(local_storage.load(|ls| ls.user_config.clone()));
         let auth_config = Mutex::new(local_storage.load(|ls| ls.auth_config.clone()));
         let skipped_files = Mutex::new(local_storage.load(|ls| ls.skipped_files.clone()));
+        let host_override = Mutex::new(local_storage.load(|ls| ls.host_override.clone()));
 
         Self {
             local_storage,
             user_config,
             auth_config,
             skipped_files,
+            host_override,
         }
     }
 
@@ -51,6 +54,25 @@ impl AppState {
     }
 
 
+    pub fn get_host_override(&self) -> Option<String> {
+        self.host_override.lock_or_err().ok()?.clone()
+    }
+
+    pub fn set_host_override(&self, host: Option<String>) -> Result<(), AppError> {
+        let mut guard = self.host_override.lock_or_err()?;
+
+        match &host {
+            Some(h) => self.local_storage
+                .save(|ls| ls.host_override.clone(), h)
+                .map_err(AppError::from)?,
+            None => self.local_storage
+                .clear(|ls| ls.host_override.clone())?,
+        }
+
+        *guard = host;
+        Ok(())
+    }
+
     pub fn clear_state(&self) -> Result<(), AppError> {
         let mut user_guard = self.user_config.lock_or_err()?;
         let mut files_guard = self.skipped_files.lock_or_err()?;
@@ -70,6 +92,7 @@ struct LocalStorage {
     pub user_config: Option<PathBuf>,
     pub auth_config: Option<PathBuf>,
     pub skipped_files: Option<PathBuf>,
+    pub host_override: Option<PathBuf>,
 }
 
 impl LocalStorage {
@@ -78,6 +101,7 @@ impl LocalStorage {
             user_config: Some(app_data_dir.join("user_config.json")),
             auth_config: Some(app_data_dir.join("oauth_config.json")),
             skipped_files: Some(app_data_dir.join("skipped_files.json")),
+            host_override: Some(app_data_dir.join("host_override.json")),
         }
     }
 

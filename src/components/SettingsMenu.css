@@ -142,78 +142,123 @@
   padding: 8px;
 }
 
-/* ---------- Host Override ---------- */
-.host-override-group {
+.auth-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.auth-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.sign-in-btn {
+  background: #2196F3;
+  color: #fff;
+}
+
+.sign-in-btn:hover:not(:disabled) {
+  background: #1976D2;
+}
+
+.sign-out-btn {
+  background: transparent;
+  border: 1px solid #d0d0d0;
+  color: #666;
+}
+
+.sign-out-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
+.confirm-switch-btn {
+  background: #f44336;
+  color: #fff;
+}
+
+.confirm-switch-btn:hover:not(:disabled) {
+  background: #d32f2f;
+}
+
+/* ---------- Confirm Modal ---------- */
+.confirm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.confirm-modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.confirm-modal h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.confirm-modal p {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ---------- Environment ---------- */
+.env-group {
   background: #f8f8f8;
   border-radius: 6px;
   padding: 12px;
 }
 
-.host-override-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.host-override-input-row {
-  display: flex;
-  gap: 8px;
-}
-
-.host-override-input {
-  flex: 1;
+.env-select {
+  width: 100%;
   padding: 8px 10px;
   font-size: 13px;
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   background: #fff;
   color: #333;
+  cursor: pointer;
 }
 
-.host-override-input:focus {
+.env-select:focus {
   outline: none;
   border-color: #2196F3;
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
 }
 
-.host-override-input::placeholder {
-  color: #999;
-}
-
-.host-save-btn {
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  border: none;
-  border-radius: 4px;
-  background: #2196F3;
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.host-save-btn:hover:not(:disabled) {
-  background: #1976D2;
-}
-
-.host-save-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.host-save-btn.saved {
-  background: #4CAF50;
-}
-
-.host-save-btn.error {
-  background: #f44336;
-}
-
-.host-override-hint {
-  margin: 8px 0 0 0;
+.env-host-hint {
+  display: block;
+  margin-top: 6px;
   font-size: 11px;
   color: #999;
 }
