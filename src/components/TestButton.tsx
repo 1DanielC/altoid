@@ -134,8 +134,20 @@ export default function TestButton() {
           {loading === "uploading" ? "Uploading..." : `Upload Files${pendingUploads.length > 0 ? ` (${pendingUploads.length})` : ''}`}
         </button>
       </div>
+      {loading && (
+        <div className="loading-indicator">
+          <div className="spinner" />
+          <span>{
+            loading === "camera" ? "Scanning for cameras..." :
+            loading === "api" ? "Contacting server..." :
+            loading === "uploads" ? "Creating uploads..." :
+            loading === "uploading" ? "Uploading files..." :
+            "Working..."
+          }</span>
+        </div>
+      )}
       <UploadTable uploads={uploads} />
-      {result && <pre className="test-result">{result}</pre>}
+      {result && !loading && <pre className="test-result">{result}</pre>}
     </div>
   );
 }
