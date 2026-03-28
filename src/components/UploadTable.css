@@ -49,6 +49,11 @@
   letter-spacing: 0.3px;
 }
 
+.status-waiting {
+  background: #f5f5f5;
+  color: #999;
+}
+
 .status-new {
   background: #e3f2fd;
   color: #1565c0;

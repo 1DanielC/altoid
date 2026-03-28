@@ -1,6 +1,6 @@
 use std::fs;
 use crate::api::oauth::auth::authenticate_user;
-use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request, upload_file_bytes};
+use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request};
 use crate::state::OAuthConfig;
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::error::AppError;
@@ -30,6 +30,25 @@ fn err_response(app_error: AppError) -> Value {
     app_error.to_ipc_response().to_json().unwrap()
 }
 
+/// Check if the user is already authenticated without triggering OAuth.
+/// Returns user info if available, null otherwise.
+#[tauri::command]
+async fn check_user() -> Result<Option<UserInfo>, Value> {
+    // If no user config exists, user is not logged in
+    let state = APP_STATE
+        .get()
+        .ok_or(err_response(AppError::internal("App not initialized")))?;
+
+    if state.get_user_config().is_none() {
+        return Ok(None);
+    }
+
+    // User config exists, try to fetch user info from API
+    get_user_info()
+        .await
+        .map_err(|e| err_response(AppError::from(e)))
+}
+
 #[tauri::command]
 async fn get_user() -> Result<UserInfo, Value> {
     let ui = get_user_info()
@@ -44,7 +63,7 @@ async fn get_user() -> Result<UserInfo, Value> {
 
     get_user_info()
         .await
-        .unwrap()
+        .map_err(|e| err_response(AppError::from(e)))?
         .ok_or(err_response(AppError::NotAuthenticated))
 }
 
@@ -144,16 +163,66 @@ async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, V
     }))
 }
 
+/// Combined create-and-upload command for a single file.
+/// For PTP cameras, downloads the file first to get the real size,
+/// then creates the upload with the correct size, then uploads the bytes.
 #[tauri::command]
 async fn upload_file(
-    upload_id: String,
+    device_id: String,
     file_path: String,
+    filename: String,
+    mount_point: String,
     content_type: String,
-) -> Result<(), Value> {
-    info!("Uploading file {} for upload {}", file_path, upload_id);
-    upload_file_bytes(&upload_id, &file_path, &content_type)
+) -> Result<Value, Value> {
+    use crate::api::openspace::api::{read_file_bytes, upload_bytes_to_server};
+
+    info!("Upload file: {} (mount: {})", file_path, mount_point);
+
+    // Step 1: Read the file bytes (handles PTP vs mass storage)
+    let file_bytes = read_file_bytes(&file_path, &mount_point)
         .await
-        .map_err(|e| err_response(e))
+        .map_err(|e| err_response(e))?;
+
+    let real_size = file_bytes.len() as i64;
+    info!("File {} real size: {} bytes", filename, real_size);
+
+    // Step 2: Create the upload with the real file size
+    let body = serde_json::json!({
+        "deviceId": device_id,
+        "deviceFilename": filename,
+        "contentType": content_type,
+        "size": real_size,
+    });
+
+    let create_response = make_request("POST", "/api/desktop-client/uploads", body, None)
+        .await
+        .map_err(|e| err_response(e))?;
+
+    let upload_id = create_response["uploadId"].as_str();
+    let status = create_response["status"].as_str().unwrap_or("Pending");
+
+    if status == "Completed" || upload_id.is_none() {
+        info!("File {} already uploaded (status: {})", filename, status);
+        return Ok(serde_json::json!({
+            "filename": filename,
+            "status": "Completed",
+            "uploadId": create_response["uploadId"],
+        }));
+    }
+
+    let upload_id = upload_id.unwrap();
+
+    // Step 3: Upload the bytes
+    upload_bytes_to_server(upload_id, &content_type, file_bytes)
+        .await
+        .map_err(|e| err_response(e))?;
+
+    info!("File {} uploaded successfully", filename);
+    Ok(serde_json::json!({
+        "filename": filename,
+        "status": "Uploaded",
+        "uploadId": upload_id,
+    }))
 }
 
 #[tauri::command]
@@ -257,6 +326,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            check_user,
             get_user,
             req,
             get_camera,

@@ -1,6 +1,6 @@
 import './UploadTable.css';
 
-export type UploadStatus = 'new' | 'in_progress' | 'uploaded';
+export type UploadStatus = 'waiting' | 'new' | 'in_progress' | 'uploaded';
 
 export interface UploadEntry {
   filename: string;
@@ -15,6 +15,7 @@ interface UploadTableProps {
 
 function statusLabel(status: UploadStatus): string {
   switch (status) {
+    case 'waiting': return 'Waiting';
     case 'new': return 'New';
     case 'in_progress': return 'In Progress';
     case 'uploaded': return 'Uploaded';
@@ -23,6 +24,7 @@ function statusLabel(status: UploadStatus): string {
 
 function statusClass(status: UploadStatus): string {
   switch (status) {
+    case 'waiting': return 'status-waiting';
     case 'new': return 'status-new';
     case 'in_progress': return 'status-progress';
     case 'uploaded': return 'status-uploaded';

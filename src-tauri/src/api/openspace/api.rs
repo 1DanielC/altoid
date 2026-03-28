@@ -12,22 +12,6 @@ use crate::APP_STATE;
 static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
 
-struct OSApi {
-    api_host: String,
-    access_token: String,
-    token_type: String,
-}
-
-impl OSApi {
-    fn new(api_host: String, access_token: String, token_type: String) -> Self {
-        Self {
-            api_host,
-            access_token,
-            token_type,
-        }
-    }
-}
-
 pub async fn make_request(
     method: &str,
     path: &str,
@@ -91,12 +75,22 @@ pub async fn make_request(
 
     Ok(json)
 }
-/// Upload a file's bytes to an existing upload via PUT /api/desktop-client/uploads/{uploadId}.
-/// Sends the entire file as a single chunk with Content-Range header.
-pub async fn upload_file_bytes(
+/// Read file bytes - handles both local filesystem and PTP cameras.
+pub async fn read_file_bytes(file_path: &str, mount_point: &str) -> Result<Vec<u8>, AppError> {
+    if mount_point == "PTP" {
+        download_ptp_file(file_path).await
+    } else {
+        let full_path = format!("{}/{}", mount_point, file_path);
+        tokio::fs::read(&full_path).await
+            .map_err(|e| AppError::internal(&format!("Failed to read file {}: {}", full_path, e)))
+    }
+}
+
+/// Upload raw bytes to an existing upload via PUT /api/desktop-client/uploads/{uploadId}.
+pub async fn upload_bytes_to_server(
     upload_id: &str,
-    file_path: &str,
     content_type: &str,
+    file_bytes: Vec<u8>,
 ) -> Result<(), AppError> {
     let state = APP_STATE
         .get()
@@ -115,9 +109,6 @@ pub async fn upload_file_bytes(
     let path = format!("/api/desktop-client/uploads/{}", upload_id);
     let url = base.join(&path)
         .map_err(|e| AppError::url_parse(format!("Could not build url: {}", path), e))?;
-
-    let file_bytes = tokio::fs::read(file_path).await
-        .map_err(|e| AppError::internal(&format!("Failed to read file {}: {}", file_path, e)))?;
 
     let file_size = file_bytes.len();
     let content_range = if file_size > 0 {
@@ -152,6 +143,77 @@ pub async fn upload_file_bytes(
     }
 
     Ok(())
+}
+
+/// Kill the macOS PTPCamera process that grabs the USB device.
+async fn kill_ptpcamera() {
+    let _ = tokio::process::Command::new("killall")
+        .args(["PTPCamera"])
+        .output()
+        .await;
+    // Give the OS a moment to release the device
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+}
+
+/// Download a file from the camera via gphoto2 PTP, returning the bytes.
+/// Retries once after killing PTPCamera if USB claim fails.
+async fn download_ptp_file(camera_path: &str) -> Result<Vec<u8>, AppError> {
+    info!("Downloading PTP file: {}", camera_path);
+
+    let temp_dir = std::env::temp_dir().join("altoid_ptp");
+    tokio::fs::create_dir_all(&temp_dir).await
+        .map_err(|e| AppError::internal(&format!("Failed to create temp dir: {}", e)))?;
+
+    let filename = std::path::Path::new(camera_path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let temp_file = temp_dir.join(&filename);
+
+    let folder = std::path::Path::new(camera_path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "/".to_string());
+
+    // Try up to 2 times: first attempt, then retry after killing PTPCamera
+    for attempt in 0..2 {
+        let output = tokio::process::Command::new("gphoto2")
+            .args([
+                "--folder", &folder,
+                "--get-file", &filename,
+                "--filename", &temp_file.to_string_lossy(),
+                "--force-overwrite",
+            ])
+            .output()
+            .await
+            .map_err(|e| AppError::internal(&format!("Failed to run gphoto2: {}", e)))?;
+
+        if output.status.success() {
+            info!("Downloaded PTP file to {}", temp_file.display());
+
+            let bytes = tokio::fs::read(&temp_file).await
+                .map_err(|e| AppError::internal(&format!("Failed to read temp file: {}", e)))?;
+
+            let _ = tokio::fs::remove_file(&temp_file).await;
+            return Ok(bytes);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if attempt == 0 && stderr.contains("Could not claim") {
+            info!("USB claim failed, killing PTPCamera and retrying...");
+            kill_ptpcamera().await;
+            continue;
+        }
+
+        return Err(AppError::internal(&format!(
+            "gphoto2 download failed for {}: {}",
+            camera_path, stderr
+        )));
+    }
+
+    Err(AppError::internal(&format!("gphoto2 download failed for {} after retries", camera_path)))
 }
 
 const DEFAULT_HOST: &str = "http://localhost:8080";

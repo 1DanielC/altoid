@@ -33,7 +33,7 @@ export interface CreateUploadsResult {
   total: number;
   results: Array<{
     filename: string;
-    response?: { uploadId: string | null };
+    response?: { uploadId: string | null; status?: string };
     error?: string;
   }>;
 }
@@ -41,6 +41,18 @@ export interface CreateUploadsResult {
 export async function createUploads(deviceId: string, files: CameraFile[]): Promise<CreateUploadsResult> {
   return await invoke<CreateUploadsResult>("create_uploads", { deviceId, files });
 }
-export async function uploadFile(uploadId: string, filePath: string, contentType: string): Promise<void> {
-  await invoke("upload_file", { uploadId, filePath, contentType });
+export interface UploadFileResult {
+  filename: string;
+  status: string;
+  uploadId?: string | null;
+}
+
+export async function uploadFile(
+  deviceId: string,
+  filePath: string,
+  filename: string,
+  mountPoint: string,
+  contentType: string,
+): Promise<UploadFileResult> {
+  return await invoke<UploadFileResult>("upload_file", { deviceId, filePath, filename, mountPoint, contentType });
 }

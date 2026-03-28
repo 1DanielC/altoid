@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useQueryClient } from '@tanstack/react-query';
+import { USER_QUERY_KEY } from './hooks/queries/useUserQuery';
 import Header from './components/Header';
 import Content from './components/Content';
 import Footer from './components/Footer';
@@ -10,16 +12,28 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     invoke('load_config')
-      .then(() => setConfigLoaded(true))
+      .then(async () => {
+        // Check if user is already authenticated
+        try {
+          const user = await invoke('check_user');
+          if (user) {
+            queryClient.setQueryData(USER_QUERY_KEY, user);
+          }
+        } catch (e) {
+          console.log('User not authenticated:', e);
+        }
+        setConfigLoaded(true);
+      })
       .catch((e) => {
         console.error('Failed to load config:', e);
         setConfigError(typeof e === 'string' ? e : JSON.stringify(e));
         setConfigLoaded(true);
       });
-  }, []);
+  }, [queryClient]);
 
   if (!configLoaded) {
     return (

@@ -1,9 +1,7 @@
 import { useState, useCallback } from "react";
-import { getCamera, createUploads, uploadFile, CameraResult } from "../contexts/services/CameraService.ts";
+import { getCamera, uploadFile, CameraResult } from "../contexts/services/CameraService.ts";
 import { request } from "../contexts/services/ApiService.ts";
 import UploadTable, { UploadEntry } from "./UploadTable.tsx";
-
-const BATCH_SIZE = 3;
 
 export default function TestButton() {
   const [result, setResult] = useState<string | null>(null);
@@ -28,79 +26,57 @@ export default function TestButton() {
     }
   };
 
-  const handleCreateUploads = async () => {
-    setLoading("uploads");
-    setResult(null);
-    try {
-      const r = await createUploads(cameraData!.camera!.device_id, cameraData!.files!);
-      const entries: UploadEntry[] = r.results
-        .filter((item) => !item.error)
-        .map((item) => ({
-          filename: item.filename,
-          uploadId: item.response?.uploadId ?? null,
-          status: item.response?.uploadId === null ? 'uploaded' : 'new',
-          progress: item.response?.uploadId === null ? 100 : 0,
-        }));
-      setUploads(entries);
-      setResult(JSON.stringify(r, null, 2));
-    } catch (e: unknown) {
-      const msg = typeof e === 'string' ? e
-        : e instanceof Error ? e.message
-        : JSON.stringify(e, null, 2);
-      setResult(`Error: ${msg}`);
-    } finally {
-      setLoading(null);
-    }
-  };
-
   const updateUpload = useCallback((filename: string, update: Partial<UploadEntry>) => {
     setUploads(prev => prev.map(u =>
       u.filename === filename ? { ...u, ...update } : u
     ));
   }, []);
 
+
   const handleUploadFiles = async () => {
     setLoading("uploading");
     setResult(null);
 
     const mountPoint = cameraData?.mount_point ?? "";
-    const pending = uploads.filter(u => u.status === 'new' && u.uploadId);
+    const deviceId = cameraData!.camera!.device_id;
+    const files = (cameraData?.files ?? []).filter(f => {
+      const ext = f.filename.split('.').pop()?.toLowerCase();
+      return ext === 'insv' || ext === 'mp4';
+    });
 
-    // Find the matching camera file for each pending upload
-    const fileMap = new Map(
-      (cameraData?.files ?? []).map(f => [f.filename, f])
-    );
+    // Populate the table with all files in "waiting" state
+    setUploads(files.map(f => ({
+      filename: f.filename,
+      uploadId: null,
+      status: 'waiting' as const,
+      progress: 0,
+    })));
 
-    // Process in batches of BATCH_SIZE
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const batch = pending.slice(i, i + BATCH_SIZE);
+    // Process one at a time, top to bottom
+    for (const file of files) {
+      updateUpload(file.filename, { status: 'in_progress', progress: 50 });
 
-      await Promise.all(batch.map(async (entry) => {
-        const file = fileMap.get(entry.filename);
-        if (!file || !entry.uploadId) return;
+      try {
+        const r = await uploadFile(deviceId, file.path, file.filename, mountPoint, file.content_type);
 
-        const fullPath = mountPoint ? `${mountPoint}/${file.path}` : file.path;
-
-        updateUpload(entry.filename, { status: 'in_progress', progress: 50 });
-
-        try {
-          await uploadFile(entry.uploadId, fullPath, file.content_type);
-          updateUpload(entry.filename, { status: 'uploaded', progress: 100 });
-        } catch (e) {
-          const msg = typeof e === 'string' ? e
-            : e instanceof Error ? e.message
-            : JSON.stringify(e);
-          updateUpload(entry.filename, { status: 'new', progress: 0 });
-          console.error(`Upload failed for ${entry.filename}: ${msg}`);
-        }
-      }));
+        updateUpload(file.filename, {
+          uploadId: r.uploadId ?? null,
+          status: r.status === 'Completed' || r.status === 'Uploaded' ? 'uploaded' : 'new',
+          progress: r.status === 'Completed' || r.status === 'Uploaded' ? 100 : 0,
+        });
+      } catch (e: unknown) {
+        const msg = typeof e === 'string' ? e
+          : e instanceof Error ? e.message
+          : JSON.stringify(e);
+        updateUpload(file.filename, { status: 'new', progress: 0 });
+        console.error(`Upload failed for ${file.filename}: ${msg}`);
+      }
     }
 
     setLoading(null);
   };
 
   const hasFiles = cameraData?.camera?.device_id && cameraData?.files && cameraData.files.length > 0;
-  const pendingUploads = uploads.filter(u => u.status === 'new' && u.uploadId);
 
   return (
     <div>
@@ -121,26 +97,18 @@ export default function TestButton() {
         </button>
         <button
           className="button"
-          onClick={handleCreateUploads}
+          onClick={handleUploadFiles}
           disabled={loading !== null || !hasFiles}
         >
-          {loading === "uploads" ? "Creating..." : `Create Uploads${hasFiles ? ` (${cameraData!.files!.length})` : ''}`}
-        </button>
-        <button
-          className="button"
-          onClick={handleUploadFiles}
-          disabled={loading !== null || pendingUploads.length === 0}
-        >
-          {loading === "uploading" ? "Uploading..." : `Upload Files${pendingUploads.length > 0 ? ` (${pendingUploads.length})` : ''}`}
+          {loading === "uploading" ? "Uploading..." : `Upload Files${hasFiles ? ` (${cameraData!.files!.length})` : ''}`}
         </button>
       </div>
-      {loading && (
+      {loading && !uploads.length && (
         <div className="loading-indicator">
           <div className="spinner" />
           <span>{
             loading === "camera" ? "Scanning for cameras..." :
             loading === "api" ? "Contacting server..." :
-            loading === "uploads" ? "Creating uploads..." :
             loading === "uploading" ? "Uploading files..." :
             "Working..."
           }</span>
