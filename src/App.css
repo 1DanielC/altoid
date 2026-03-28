@@ -18,16 +18,28 @@ body {
 
 #header {
   display: flex;
-  padding: 5px;
-  height: 10vh;
-  align-items: center;            /* center vertically */
-  justify-content: space-between; /* space between title and login button */
+  padding: 0 10px;
+  padding-top: env(titlebar-area-y, 0px);
+  height: 48px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
   background-color: #2d72d8;
   color: #fff;
-  font-size: 20px;
-  font-weight: 10;
-  text-align: left;
-  flex-shrink: 0;            /* prevent header from shrinking */
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+  position: relative;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+#header span {
+  flex: 1;
+  text-align: center;
+  padding-left: 40px;            /* balance the button on the right */
 }
 
 #content {
@@ -176,29 +188,29 @@ body {
 
 /* ---------- Login Button Styling ---------- */
 .login-button {
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  border: 2px solid white;
-  background: rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.15);
   color: white;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 10px;
-  transition: all 0.3s ease;
+  margin-right: 4px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .login-button:hover {
   background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
+  border-color: white;
 }
 
 .login-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
 }
