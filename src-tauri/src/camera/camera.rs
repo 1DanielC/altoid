@@ -5,16 +5,31 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri_plugin_log::log::{error, info};
 
-#[derive(Debug, Serialize)]
-pub struct  CameraWithFiles {
+#[derive(Debug, Clone, Serialize)]
+pub struct DetectedCamera {
     pub info: &'static CameraInfo,
+    pub serial_number: Option<String>,
+    pub device_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CameraFile {
+    pub path: PathBuf,
+    pub filename: String,
+    pub size: i64,
+    pub content_type: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CameraWithFiles {
+    pub camera: DetectedCamera,
     pub mount_point: Option<PathBuf>,
-    pub files: Vec<PathBuf>,
+    pub files: Vec<CameraFile>,
     pub access_error: Option<String>,
 }
 
-pub fn find_camera() -> Option<CameraWithFiles> {
-    // Attempt to enumerate USB devices
+/// Fast USB scan to detect a known camera. Does not list files.
+pub fn detect_camera() -> Option<DetectedCamera> {
     let devices = match rusb::devices() {
         Ok(devices) => devices,
         Err(e) => {
@@ -23,34 +38,55 @@ pub fn find_camera() -> Option<CameraWithFiles> {
         }
     };
 
-    // Iterate through all connected USB devices
     for device in devices.iter() {
         if let Ok(desc) = device.device_descriptor() {
-            let vendor_id = desc.vendor_id();
+            if let Some(camera_info) = CAMERAS.get(&desc.vendor_id()) {
+                info!("Found camera: {} (Vendor ID: {})", camera_info.device, desc.vendor_id());
 
-            // Check if this vendor ID matches any camera in our CAMERAS map
-            if let Some(camera_info) = CAMERAS.get(&vendor_id) {
-                info!("Found camera: {} (Vendor ID: {})", camera_info.device, vendor_id);
+                let serial_number = device
+                    .open()
+                    .ok()
+                    .and_then(|handle| {
+                        handle
+                            .read_serial_number_string_ascii(&desc)
+                            .ok()
+                    });
 
-                // Try to find the mounted storage device and list files
-                let (mount_point, files, access_error) = find_camera_files();
+                let device_id = format!(
+                    "{}:sn:{}",
+                    camera_info.device,
+                    serial_number.as_deref().unwrap_or("unknown")
+                );
 
-                return Some(CameraWithFiles {
+                info!("Camera device ID: {}", device_id);
+
+                return Some(DetectedCamera {
                     info: camera_info,
-                    mount_point,
-                    files,
-                    access_error,
+                    serial_number,
+                    device_id,
                 });
             }
         }
     }
 
-    // No matching camera found
-    error!("No supported camera found connected via USB");
+    info!("No supported camera found connected via USB");
     None
 }
 
-fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
+/// Full camera detection: find camera then list its files (can be slow).
+pub fn find_camera() -> Option<CameraWithFiles> {
+    let detected = detect_camera()?;
+    let (mount_point, files, access_error) = find_camera_files();
+
+    Some(CameraWithFiles {
+        camera: detected,
+        mount_point,
+        files,
+        access_error,
+    })
+}
+
+fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>) {
     info!("Attempting PTP camera access via gphoto2 CLI...");
 
     // First, check if gphoto2 is available
@@ -114,7 +150,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
     }
 }
 
-fn parse_gphoto2_file_list(output: &str) -> Vec<PathBuf> {
+fn parse_gphoto2_file_list(output: &str) -> Vec<CameraFile> {
     let mut files = Vec::new();
     let mut current_folder = String::new();
 
@@ -128,17 +164,34 @@ fn parse_gphoto2_file_list(output: &str) -> Vec<PathBuf> {
             }
         }
         // Look for file lines starting with #N
+        // Format: #1     R0010001.JPG               rd  8367 KB ...
         else if line.starts_with('#') {
-            // Parse file line format: #1     R0010001.JPG               rd  8367 KB ...
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let filename = parts[1];
+            if parts.len() >= 4 {
+                let filename = parts[1].to_string();
                 let file_path = if current_folder.is_empty() {
-                    PathBuf::from(filename)
+                    PathBuf::from(&filename)
                 } else {
                     PathBuf::from(format!("{}/{}", current_folder, filename))
                 };
-                files.push(file_path);
+
+                // Parse size: e.g. "8367 KB"
+                let size_kb = parts[3].parse::<i64>().unwrap_or(0);
+                let size_unit = parts.get(4).unwrap_or(&"KB");
+                let size = match *size_unit {
+                    "MB" => size_kb * 1024 * 1024,
+                    "GB" => size_kb * 1024 * 1024 * 1024,
+                    _ => size_kb * 1024, // KB default
+                };
+
+                let content_type = guess_content_type(&file_path);
+
+                files.push(CameraFile {
+                    path: file_path,
+                    filename,
+                    size,
+                    content_type,
+                });
             }
         }
     }
@@ -146,7 +199,7 @@ fn parse_gphoto2_file_list(output: &str) -> Vec<PathBuf> {
     files
 }
 
-fn find_camera_files() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
+fn find_camera_files() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>) {
     // First, try PTP access via gphoto2
     let (mount_point, files, error) = find_camera_files_ptp();
     if mount_point.is_some() && !files.is_empty() {
@@ -243,7 +296,21 @@ fn find_camera_files() -> (Option<PathBuf>, Vec<PathBuf>, Option<String>) {
     (None, Vec::new(), Some(error_msg))
 }
 
-fn list_files_recursive(base_path: &PathBuf, current_path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
+fn guess_content_type(path: &PathBuf) -> String {
+    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
+        Some("jpg") | Some("jpeg") => "image/jpeg".to_string(),
+        Some("png") => "image/png".to_string(),
+        Some("mp4") => "video/mp4".to_string(),
+        Some("mov") => "video/quicktime".to_string(),
+        Some("dng") => "image/x-adobe-dng".to_string(),
+        Some("raw") => "application/octet-stream".to_string(),
+        Some("insp") => "image/jpeg".to_string(),
+        Some("insv") => "video/mp4".to_string(),
+        _ => "application/octet-stream".to_string(),
+    }
+}
+
+fn list_files_recursive(base_path: &PathBuf, current_path: &PathBuf) -> std::io::Result<Vec<CameraFile>> {
     let mut files = Vec::new();
 
     let entries = fs::read_dir(current_path)?;
@@ -253,21 +320,29 @@ fn list_files_recursive(base_path: &PathBuf, current_path: &PathBuf) -> std::io:
         let path = entry.path();
 
         if path.is_dir() {
-            // Recursively list files in subdirectories
             match list_files_recursive(base_path, &path) {
                 Ok(mut subfiles) => files.append(&mut subfiles),
                 Err(e) => {
                     error!("Warning: Could not read directory {}: {}", path.display(), e);
-                    // Continue with other directories
                 }
             }
         } else if path.is_file() {
-            // Store relative path from base mount point
-            if let Ok(relative_path) = path.strip_prefix(base_path) {
-                files.push(relative_path.to_path_buf());
-            } else {
-                files.push(path);
-            }
+            let metadata = entry.metadata()?;
+            let relative_path = path.strip_prefix(base_path)
+                .unwrap_or(&path)
+                .to_path_buf();
+            let filename = path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let content_type = guess_content_type(&path);
+
+            files.push(CameraFile {
+                path: relative_path,
+                filename,
+                size: metadata.len() as i64,
+                content_type,
+            });
         }
     }
 

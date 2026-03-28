@@ -74,23 +74,79 @@ async fn req(
 
 #[tauri::command]
 async fn get_camera() -> Result<Value, Value> {
-    let result = tokio::time::timeout(
+    // Step 1: Quick USB scan with 5s timeout
+    let detect = tokio::time::timeout(
         std::time::Duration::from_secs(5),
-        tokio::task::spawn_blocking(|| camera::camera::find_camera()),
+        tokio::task::spawn_blocking(|| camera::camera::detect_camera()),
     )
     .await;
 
-    let camera = match result {
-        Ok(Ok(Some(cam))) => return cam.to_json().map_err(|e| err_response(AppError::from(e))),
-        _ => serde_json::json!({ "message": "No camera found" }),
+    let detected = match detect {
+        Ok(Ok(Some(cam))) => cam,
+        _ => return Ok(serde_json::json!({ "message": "No camera found" })),
     };
 
-    Ok(camera)
+    let device_id = detected.device_id.clone();
+
+    // Step 2: List files (no timeout - can be slow for PTP/mass storage)
+    let result = tokio::task::spawn_blocking(move || camera::camera::find_camera())
+        .await
+        .map_err(|e| err_response(AppError::internal(&format!("File listing failed: {}", e))))?;
+
+    match result {
+        Some(cam) => cam.to_json().map_err(|e| err_response(AppError::from(e))),
+        None => Ok(serde_json::json!({
+            "message": "Camera detected but could not list files",
+            "device_id": device_id,
+        })),
+    }
 }
 
 #[tauri::command]
 async fn get_camera_files() -> Result<(), Value> {
     Ok(())
+}
+
+#[tauri::command]
+async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, Value> {
+    info!("Creating uploads for {} files on device {}", files.len(), device_id);
+
+    let mut results = Vec::new();
+
+    for file in &files {
+        let filename = file["filename"].as_str().unwrap_or("unknown");
+        let content_type = file["content_type"].as_str().unwrap_or("application/octet-stream");
+        let size = file["size"].as_i64().unwrap_or(0);
+
+        let body = serde_json::json!({
+            "deviceId": device_id,
+            "deviceFilename": filename,
+            "contentType": content_type,
+            "size": size,
+        });
+
+        match make_request("POST", "/api/desktop-client/uploads", body, None).await {
+            Ok(response) => {
+                info!("Created upload for {}: {}", filename, response);
+                results.push(serde_json::json!({
+                    "filename": filename,
+                    "response": response,
+                }));
+            }
+            Err(e) => {
+                error!("Failed to create upload for {}: {}", filename, e);
+                results.push(serde_json::json!({
+                    "filename": filename,
+                    "error": format!("{}", e),
+                }));
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "total": files.len(),
+        "results": results,
+    }))
 }
 
 #[tauri::command]
@@ -200,6 +256,7 @@ pub fn run() {
             get_camera_files,
             clear_state,
             load_config,
+            create_uploads,
             get_host,
             set_host,
         ])

@@ -1,10 +1,10 @@
 import {useQuery} from "@tanstack/react-query";
-import {getCamera} from "../../contexts/services/CameraService.ts";
+import {getCamera, CameraResult} from "../../contexts/services/CameraService.ts";
 
 export const CAMERA_QUERY_KEY = ['camera'] as const;
 
 export function useCameraQuery() {
-  return useQuery<string | null, Error>({
+  return useQuery<CameraResult | null, Error>({
     queryKey: CAMERA_QUERY_KEY,
     queryFn: async () => {
       try {
