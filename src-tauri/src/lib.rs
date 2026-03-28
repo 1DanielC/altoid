@@ -1,6 +1,7 @@
 use std::fs;
 use crate::api::oauth::auth::authenticate_user;
-use crate::api::openspace::api::{get_user_info, make_request};
+use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request};
+use crate::state::OAuthConfig;
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::error::AppError;
 use crate::ipc::pub_ipc_response::ToIpcResponse;
@@ -73,14 +74,79 @@ async fn req(
 
 #[tauri::command]
 async fn get_camera() -> Result<Value, Value> {
-    camera::camera::find_camera()
-        .to_json()
-        .map_err(|e| err_response(AppError::from(e)))
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::task::spawn_blocking(|| camera::camera::find_camera()),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(camera)) => camera
+            .to_json()
+            .map_err(|e| err_response(AppError::from(e))),
+        Ok(Err(e)) => Err(err_response(AppError::internal(&format!(
+            "Camera detection panicked: {}",
+            e
+        )))),
+        Err(_) => Err(err_response(AppError::internal(
+            "Camera detection timed out after 5 seconds",
+        ))),
+    }
 }
 
 #[tauri::command]
 async fn get_camera_files() -> Result<(), Value> {
     Ok(())
+}
+
+#[tauri::command]
+async fn load_config() -> Result<Value, Value> {
+    let state = APP_STATE
+        .get()
+        .ok_or(err_response(AppError::internal("App not initialized")))?;
+
+    // If we already have oauth_config, return it
+    if let Some(config) = state.get_auth_config() {
+        info!("OAuth config already exists, skipping bootstrap");
+        return config
+            .to_json()
+            .map_err(|e| err_response(AppError::from(e)));
+    }
+
+    // Fetch from remote
+    info!("No OAuth config found, fetching bootstrap config...");
+    let response = fetch_bootstrap_config()
+        .await
+        .map_err(|e| err_response(e))?;
+
+    // Parse and save
+    info!("Bootstrap config response: {}", serde_json::to_string(&response).unwrap_or_default());
+
+    // The API returns camelCase keys and PascalCase enum values,
+    // so we translate to our internal format.
+    let oauth_config = OAuthConfig {
+        client_id: response["clientId"]
+            .as_str()
+            .ok_or_else(|| err_response(AppError::internal("Bootstrap config missing clientId")))?
+            .to_string(),
+        env: serde_json::from_value(response["env"].clone())
+            .map_err(|e| err_response(AppError::internal_with(
+                format!("Invalid env in bootstrap config: {}", response["env"]),
+                e,
+            )))?,
+        scope: match response["scope"].as_str().unwrap_or("Email") {
+            "OpenId" | "openid" | "Openid" => crate::api::oauth::pkg_auth::AuthScope::Openid,
+            "OfflineAccess" | "offline_access" => crate::api::oauth::pkg_auth::AuthScope::OfflineAccess,
+            _ => crate::api::oauth::pkg_auth::AuthScope::Email,
+        },
+    };
+
+    state
+        .set_auth_config(oauth_config)
+        .map_err(|e| err_response(e))?;
+
+    info!("Bootstrap config saved successfully");
+    Ok(response)
 }
 
 #[tauri::command]
@@ -139,6 +205,7 @@ pub fn run() {
             get_camera,
             get_camera_files,
             clear_state,
+            load_config,
             get_host,
             set_host,
         ])

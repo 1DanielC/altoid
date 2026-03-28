@@ -6,7 +6,7 @@ use std::process::Command;
 use tauri_plugin_log::log::{error, info};
 
 #[derive(Debug, Serialize)]
-pub struct CameraWithFiles {
+pub struct  CameraWithFiles {
     pub info: &'static CameraInfo,
     pub mount_point: Option<PathBuf>,
     pub files: Vec<PathBuf>,

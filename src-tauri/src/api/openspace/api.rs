@@ -38,15 +38,20 @@ pub async fn make_request(
     let method = Method::from_bytes(method.as_bytes())
         .map_err(|e| AppError::invalid_arg_with(format!("Invalid HTTP method: {}", method), e))?;
 
-    let user_config = APP_STATE
+    let state = APP_STATE
         .get()
-        .ok_or(AppError::internal("App State not configured"))?
+        .ok_or(AppError::internal("App State not configured"))?;
+
+    let user_config = state
         .get_user_config()
         .ok_or(AppError::ApiRequest { status: 401, message: "Not authenticated".into() })?;
 
-    let host = user_config.api_config.host();
+    let override_host = state.get_host_override();
+    let config_host = user_config.api_config.host().to_string();
+    let host = override_host.clone().unwrap_or(config_host.clone());
+    info!("Host override: {:?}, config host: {}, using: {}", override_host, config_host, host);
 
-    let base = Url::parse(host)
+    let base = Url::parse(&host)
         .map_err(|e| AppError::url_parse(format!("Invalid Host: {}", host), e))?;
     let url = base.join(path)
         .map_err(|e| AppError::url_parse(format!("Could not build url: {}", path), e))?;
@@ -86,6 +91,54 @@ pub async fn make_request(
 
     Ok(json)
 }
+const DEFAULT_HOST: &str = "http://localhost:8080";
+
+/// Fetch bootstrap config from an unauthenticated endpoint.
+/// Uses host_override if set, otherwise falls back to the default host.
+pub async fn fetch_bootstrap_config() -> Result<Value, AppError> {
+    let state = APP_STATE
+        .get()
+        .ok_or(AppError::internal("App State not configured"))?;
+
+    let host = state
+        .get_host_override()
+        .unwrap_or_else(|| DEFAULT_HOST.to_string());
+
+    info!("Fetching bootstrap config from {}", host);
+
+    let base = Url::parse(&host)
+        .map_err(|e| AppError::url_parse(format!("Invalid Host: {}", host), e))?;
+    let url = base.join("/api/desktop-client/config")
+        .map_err(|e| AppError::url_parse("Could not build bootstrap URL".to_string(), e))?;
+
+    let response = API_CLIENT
+        .get(url)
+        .timeout(Duration::from_secs(10))
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await?;
+
+    let status = response.status();
+    let body_text = response.text().await?;
+
+    info!("Bootstrap config response: status={}, body length={}", status, body_text.len());
+
+    if status.as_u16() >= 300 {
+        return Err(AppError::ApiRequest {
+            status: status.as_u16(),
+            message: format!("Bootstrap config request failed ({}): {}", status, body_text.chars().take(200).collect::<String>()),
+        });
+    }
+
+    let json: Value = serde_json::from_str(&body_text)
+        .map_err(|e| AppError::internal_with(
+            format!("Failed to parse bootstrap config: {}", body_text.chars().take(100).collect::<String>()),
+            e
+        ))?;
+
+    Ok(json)
+}
+
 /// Special case function that returns IpcError to handle 401 as Ok(None).
 ///
 /// This is one of the rare cases where we use IpcError instead of AppError,

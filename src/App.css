@@ -160,6 +160,20 @@ body {
   background: #f44336;
 }
 
+.test-result {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 50vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
 /* ---------- Login Button Styling ---------- */
 .login-button {
   width: 40px;

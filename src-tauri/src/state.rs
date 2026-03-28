@@ -1,155 +1,129 @@
 use crate::api::oauth::pkg_auth::{AuthEnv, AuthScope};
 use crate::api::openspace::pub_api_env;
 use crate::error::AppError;
-use crate::extensions::LockExt;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
+use tauri_plugin_log::log::info;
+
+/// Unified config file persisted as `altoid_config.json`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AltoidConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_config: Option<UserConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth_config: Option<OAuthConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_override: Option<String>,
+}
 
 #[derive(Debug)]
 pub struct AppState {
-    local_storage: LocalStorage,
-    user_config: Mutex<Option<UserConfig>>,
-    auth_config: Mutex<Option<OAuthConfig>>,
+    config_path: PathBuf,
+    config: Mutex<AltoidConfig>,
+    skipped_files_path: PathBuf,
     skipped_files: Mutex<Option<Vec<SkippedFile>>>,
-    host_override: Mutex<Option<String>>,
 }
 
 impl AppState {
     pub fn new(app_dir: PathBuf) -> Self {
-        let local_storage = LocalStorage::new(app_dir);
-        let user_config = Mutex::new(local_storage.load(|ls| ls.user_config.clone()));
-        let auth_config = Mutex::new(local_storage.load(|ls| ls.auth_config.clone()));
-        let skipped_files = Mutex::new(local_storage.load(|ls| ls.skipped_files.clone()));
-        let host_override = Mutex::new(local_storage.load(|ls| ls.host_override.clone()));
+        let config_path = app_dir.join("altoid_config.json");
+        let skipped_files_path = app_dir.join("skipped_files.json");
+
+        let config = load_json::<AltoidConfig>(&config_path).unwrap_or_default();
+        let skipped_files = load_json::<Vec<SkippedFile>>(&skipped_files_path);
 
         Self {
-            local_storage,
-            user_config,
-            auth_config,
-            skipped_files,
-            host_override,
+            config_path,
+            config: Mutex::new(config),
+            skipped_files_path,
+            skipped_files: Mutex::new(skipped_files),
         }
     }
 
+    // ── Config persistence ──────────────────────────────────────────
+
+    fn lock_config(&self) -> Result<MutexGuard<'_, AltoidConfig>, AppError> {
+        self.config.lock().map_err(|_| AppError::LockingError)
+    }
+
+    fn save_config(&self, config: &AltoidConfig) -> Result<(), AppError> {
+        let content = serde_json::to_string_pretty(config)
+            .map_err(|e| AppError::internal(&format!("Failed to serialize config: {}", e)))?;
+        std::fs::write(&self.config_path, content).map_err(AppError::from)
+    }
+
+    // ── UserConfig ──────────────────────────────────────────────────
+
     pub fn get_user_config(&self) -> Option<UserConfig> {
-        self.user_config.lock_or_err().ok()?.clone()
+        self.lock_config().ok()?.user_config.clone()
     }
 
-    pub fn set_user_config(&self, config: UserConfig) -> Result<(), AppError> {
-        let mut guard = self.user_config.lock_or_err()?;
-
-        self.local_storage
-            .save(|ls| ls.user_config.clone(), &config)
-            .map_err(AppError::from)?;
-
-        *guard = Some(config);
-        Ok(())
+    pub fn set_user_config(&self, user_config: UserConfig) -> Result<(), AppError> {
+        let mut guard = self.lock_config()?;
+        guard.user_config = Some(user_config);
+        self.save_config(&guard)
     }
+
+    // ── OAuthConfig ─────────────────────────────────────────────────
 
     pub fn get_auth_config(&self) -> Option<OAuthConfig> {
-        self.auth_config.lock_or_err().ok()?.clone()
+        self.lock_config().ok()?.oauth_config.clone()
     }
 
+    pub fn set_auth_config(&self, oauth_config: OAuthConfig) -> Result<(), AppError> {
+        let mut guard = self.lock_config()?;
+        guard.oauth_config = Some(oauth_config);
+        self.save_config(&guard)
+    }
+
+    // ── Host Override ───────────────────────────────────────────────
 
     pub fn get_host_override(&self) -> Option<String> {
-        self.host_override.lock_or_err().ok()?.clone()
+        let val = self.lock_config().ok()?.host_override.clone();
+        info!("get_host_override() -> {:?}", val);
+        val
     }
 
     pub fn set_host_override(&self, host: Option<String>) -> Result<(), AppError> {
-        let mut guard = self.host_override.lock_or_err()?;
-
-        match &host {
-            Some(h) => self.local_storage
-                .save(|ls| ls.host_override.clone(), h)
-                .map_err(AppError::from)?,
-            None => self.local_storage
-                .clear(|ls| ls.host_override.clone())?,
-        }
-
-        *guard = host;
+        info!("set_host_override({:?})", host);
+        let mut guard = self.lock_config()?;
+        guard.host_override = host;
+        self.save_config(&guard)?;
+        info!("host_override saved successfully");
         Ok(())
     }
+
+    // ── Clear (logout) ──────────────────────────────────────────────
 
     pub fn clear_state(&self) -> Result<(), AppError> {
-        let mut user_guard = self.user_config.lock_or_err()?;
-        let mut files_guard = self.skipped_files.lock_or_err()?;
+        // Clear user config but preserve oauth_config and host_override
+        let mut config_guard = self.lock_config()?;
+        config_guard.user_config = None;
+        self.save_config(&config_guard)?;
 
-        self.local_storage.clear(|ls| ls.skipped_files.clone())?;
-        self.local_storage.clear(|ls| ls.user_config.clone())?;
-
-        *user_guard = None;
+        // Clear skipped files
+        let mut files_guard = self.skipped_files
+            .lock()
+            .map_err(|_| AppError::LockingError)?;
         *files_guard = None;
-
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-struct LocalStorage {
-    pub user_config: Option<PathBuf>,
-    pub auth_config: Option<PathBuf>,
-    pub skipped_files: Option<PathBuf>,
-    pub host_override: Option<PathBuf>,
-}
-
-impl LocalStorage {
-    pub fn new(app_data_dir: PathBuf) -> Self {
-        Self {
-            user_config: Some(app_data_dir.join("user_config.json")),
-            auth_config: Some(app_data_dir.join("oauth_config.json")),
-            skipped_files: Some(app_data_dir.join("skipped_files.json")),
-            host_override: Some(app_data_dir.join("host_override.json")),
+        match std::fs::remove_file(&self.skipped_files_path) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(AppError::from(e)),
         }
     }
-
-    pub fn load<T, F>(&self, get_path: F) -> Option<T>
-    where
-        T: DeserializeOwned,
-        F: Fn(&Self) -> Option<PathBuf>,
-    {
-        Self::load_json(get_path(self))
-    }
-
-    pub fn save<T, F>(&self, get_path: F, data: &T) -> Result<(), std::io::Error>
-    where
-        T: serde::Serialize,
-        F: Fn(&Self) -> Option<PathBuf>,
-    {
-        let path = get_path(self).ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::NotFound, "Storage path not configured")
-        })?;
-        let content = serde_json::to_string_pretty(data)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        std::fs::write(path, content)
-    }
-
-    pub fn clear<F>(&self, get_path: F) -> Result<(), std::io::Error>
-    where
-        F: Fn(&Self) -> Option<PathBuf>,
-    {
-        if let Some(path) = get_path(self) {
-            match std::fs::remove_file(&path) {
-                Ok(_) => Ok(()),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(e) => Err(e),
-            }
-        } else {
-            Ok(())
-        }
-    }
-
-    fn load_json<T>(path: Option<PathBuf>) -> Option<T>
-    where
-        T: DeserializeOwned,
-    {
-        let p = path?;
-        let file = File::open(p).ok()?;
-        serde_json::from_reader(file).ok()
-    }
 }
+
+// ── File helpers ────────────────────────────────────────────────────
+
+fn load_json<T: serde::de::DeserializeOwned>(path: &PathBuf) -> Option<T> {
+    let file = File::open(path).ok()?;
+    serde_json::from_reader(file).ok()
+}
+
+// ── Data structs ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct UserConfig {
