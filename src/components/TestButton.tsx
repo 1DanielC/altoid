@@ -12,8 +12,11 @@ export default function TestButton() {
     try {
       const r = await fn();
       setResult(JSON.stringify(r, null, 2));
-    } catch (e) {
-      setResult(`Error: ${e}`);
+    } catch (e: unknown) {
+      const msg = typeof e === 'string' ? e
+        : e instanceof Error ? e.message
+        : JSON.stringify(e, null, 2);
+      setResult(`Error: ${msg}`);
     } finally {
       setLoading(null);
     }

@@ -80,18 +80,12 @@ async fn get_camera() -> Result<Value, Value> {
     )
     .await;
 
-    match result {
-        Ok(Ok(camera)) => camera
-            .to_json()
-            .map_err(|e| err_response(AppError::from(e))),
-        Ok(Err(e)) => Err(err_response(AppError::internal(&format!(
-            "Camera detection panicked: {}",
-            e
-        )))),
-        Err(_) => Err(err_response(AppError::internal(
-            "Camera detection timed out after 5 seconds",
-        ))),
-    }
+    let camera = match result {
+        Ok(Ok(Some(cam))) => return cam.to_json().map_err(|e| err_response(AppError::from(e))),
+        _ => serde_json::json!({ "message": "No camera found" }),
+    };
+
+    Ok(camera)
 }
 
 #[tauri::command]
