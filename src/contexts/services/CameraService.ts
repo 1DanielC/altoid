@@ -29,9 +29,18 @@ export async function getCamera(): Promise<CameraResult | null> {
   ]);
 }
 
-export async function createUploads(deviceId: string, files: CameraFile[]): Promise<unknown> {
-  return await invoke("create_uploads", { deviceId, files });
+export interface CreateUploadsResult {
+  total: number;
+  results: Array<{
+    filename: string;
+    response?: { uploadId: string | null };
+    error?: string;
+  }>;
 }
-export async function uploadAllFiles(): Promise<void> {
-  await invoke("get_camera_files");
+
+export async function createUploads(deviceId: string, files: CameraFile[]): Promise<CreateUploadsResult> {
+  return await invoke<CreateUploadsResult>("create_uploads", { deviceId, files });
+}
+export async function uploadFile(uploadId: string, filePath: string, contentType: string): Promise<void> {
+  await invoke("upload_file", { uploadId, filePath, contentType });
 }

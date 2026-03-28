@@ -17,11 +17,11 @@ impl<T> OptionExt<T> for Option<T> {
 }
 
 pub trait ResultExt<T> {
-    fn mapp_app_err(self, context: &'static str) -> Result<T, AppError>;
+    fn map_app_err(self, context: &'static str) -> Result<T, AppError>;
 }
 
 impl<T> ResultExt<T> for Result<T, AppError> {
-    fn mapp_app_err(self, context: &'static str) -> Result<T, AppError> {
+    fn map_app_err(self, context: &'static str) -> Result<T, AppError> {
         self.map_err(|e| {
             error!("{context}");
             e

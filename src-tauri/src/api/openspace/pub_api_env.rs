@@ -40,8 +40,7 @@ impl ApiEnv {
             ApiEnv::UK => "https://uk.openspace.ai",
             ApiEnv::US => "https://openspace.ai",
             ApiEnv::SGP => "https://sgp.openspace.ai",
-            // ApiEnv::Dev => Invalid
-            _ => panic!("Invalid API environment: {:?}", self),
+            ApiEnv::EphDev => "https://development.osdevenv.net",
         }
     }
 }

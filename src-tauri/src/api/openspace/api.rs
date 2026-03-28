@@ -91,6 +91,69 @@ pub async fn make_request(
 
     Ok(json)
 }
+/// Upload a file's bytes to an existing upload via PUT /api/desktop-client/uploads/{uploadId}.
+/// Sends the entire file as a single chunk with Content-Range header.
+pub async fn upload_file_bytes(
+    upload_id: &str,
+    file_path: &str,
+    content_type: &str,
+) -> Result<(), AppError> {
+    let state = APP_STATE
+        .get()
+        .ok_or(AppError::internal("App State not configured"))?;
+
+    let user_config = state
+        .get_user_config()
+        .ok_or(AppError::ApiRequest { status: 401, message: "Not authenticated".into() })?;
+
+    let host = state
+        .get_host_override()
+        .unwrap_or_else(|| user_config.api_config.host().to_string());
+
+    let base = Url::parse(&host)
+        .map_err(|e| AppError::url_parse(format!("Invalid Host: {}", host), e))?;
+    let path = format!("/api/desktop-client/uploads/{}", upload_id);
+    let url = base.join(&path)
+        .map_err(|e| AppError::url_parse(format!("Could not build url: {}", path), e))?;
+
+    let file_bytes = tokio::fs::read(file_path).await
+        .map_err(|e| AppError::internal(&format!("Failed to read file {}: {}", file_path, e)))?;
+
+    let file_size = file_bytes.len();
+    let content_range = if file_size > 0 {
+        format!("bytes 0-{}/{}", file_size - 1, file_size)
+    } else {
+        "bytes 0-0/0".to_string()
+    };
+
+    info!("Uploading {} bytes to {} (Content-Range: {})", file_size, url, content_range);
+
+    let response = API_CLIENT
+        .put(url)
+        .timeout(Duration::from_secs(300))
+        .header("Authorization", format!("{} {}", user_config.token_type, user_config.access_token))
+        .header("User-Agent", USER_AGENT)
+        .header("Content-Type", content_type)
+        .header("Content-Range", content_range)
+        .body(file_bytes)
+        .send()
+        .await?;
+
+    let status = response.status();
+    let body_text = response.text().await?;
+
+    info!("Upload response: status={}, body length={}", status, body_text.len());
+
+    if status.as_u16() >= 300 {
+        return Err(AppError::ApiRequest {
+            status: status.as_u16(),
+            message: format!("Upload failed ({}): {}", status, body_text.chars().take(200).collect::<String>()),
+        });
+    }
+
+    Ok(())
+}
+
 const DEFAULT_HOST: &str = "http://localhost:8080";
 
 /// Fetch bootstrap config from an unauthenticated endpoint.

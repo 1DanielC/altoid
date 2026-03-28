@@ -1,6 +1,6 @@
 use std::fs;
 use crate::api::oauth::auth::authenticate_user;
-use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request};
+use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request, upload_file_bytes};
 use crate::state::OAuthConfig;
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::error::AppError;
@@ -55,7 +55,7 @@ async fn clear_state() -> Result<(), Value> {
         .get()
         .ok_or(err_response(AppError::internal("App not initialized")))?
         .clear_state()
-        .expect("Something went wrong!");
+        .map_err(|e| err_response(e))?;
 
     Ok(())
 }
@@ -103,11 +103,6 @@ async fn get_camera() -> Result<Value, Value> {
 }
 
 #[tauri::command]
-async fn get_camera_files() -> Result<(), Value> {
-    Ok(())
-}
-
-#[tauri::command]
 async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, Value> {
     info!("Creating uploads for {} files on device {}", files.len(), device_id);
 
@@ -147,6 +142,18 @@ async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, V
         "total": files.len(),
         "results": results,
     }))
+}
+
+#[tauri::command]
+async fn upload_file(
+    upload_id: String,
+    file_path: String,
+    content_type: String,
+) -> Result<(), Value> {
+    info!("Uploading file {} for upload {}", file_path, upload_id);
+    upload_file_bytes(&upload_id, &file_path, &content_type)
+        .await
+        .map_err(|e| err_response(e))
 }
 
 #[tauri::command]
@@ -253,10 +260,10 @@ pub fn run() {
             get_user,
             req,
             get_camera,
-            get_camera_files,
             clear_state,
             load_config,
             create_uploads,
+            upload_file,
             get_host,
             set_host,
         ])
