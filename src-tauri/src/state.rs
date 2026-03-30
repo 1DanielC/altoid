@@ -22,23 +22,25 @@ pub struct AltoidConfig {
 pub struct AppState {
     config_path: PathBuf,
     config: Mutex<AltoidConfig>,
-    skipped_files_path: PathBuf,
-    skipped_files: Mutex<Option<Vec<SkippedFile>>>,
+    uploaded_files_path: PathBuf,
+    uploaded_files: Mutex<Option<Vec<UploadedFile>>>,
 }
 
 impl AppState {
     pub fn new(app_dir: PathBuf) -> Self {
         let config_path = app_dir.join("altoid_config.json");
-        let skipped_files_path = app_dir.join("skipped_files.json");
+        let uploaded_files_path = app_dir.join("uploaded_files.json");
 
         let config = load_json::<AltoidConfig>(&config_path).unwrap_or_default();
-        let skipped_files = load_json::<Vec<SkippedFile>>(&skipped_files_path);
+        // Also try loading from legacy path for backwards compatibility
+        let uploaded_files = load_json::<Vec<UploadedFile>>(&uploaded_files_path)
+            .or_else(|| load_json::<Vec<UploadedFile>>(&app_dir.join("skipped_files.json")));
 
         Self {
             config_path,
             config: Mutex::new(config),
-            skipped_files_path,
-            skipped_files: Mutex::new(skipped_files),
+            uploaded_files_path,
+            uploaded_files: Mutex::new(uploaded_files),
         }
     }
 
@@ -95,6 +97,35 @@ impl AppState {
         Ok(())
     }
 
+    // ── Uploaded files ──────────────────────────────────────────────
+
+    fn lock_uploaded_files(&self) -> Result<MutexGuard<'_, Option<Vec<UploadedFile>>>, AppError> {
+        self.uploaded_files.lock().map_err(|_| AppError::LockingError)
+    }
+
+    fn save_uploaded_files(&self, files: &[UploadedFile]) -> Result<(), AppError> {
+        let content = serde_json::to_string_pretty(files)
+            .map_err(|e| AppError::internal(&format!("Failed to serialize uploaded files: {}", e)))?;
+        std::fs::write(&self.uploaded_files_path, content).map_err(AppError::from)
+    }
+
+    pub fn get_uploaded_files(&self) -> Vec<UploadedFile> {
+        self.lock_uploaded_files()
+            .ok()
+            .and_then(|guard| guard.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn add_uploaded_file(&self, file: UploadedFile) -> Result<(), AppError> {
+        let mut guard = self.lock_uploaded_files()?;
+        let files = guard.get_or_insert_with(Vec::new);
+        // Avoid duplicates (same filename + device_id)
+        if !files.iter().any(|f| f.filename == file.filename && f.device_id == file.device_id) {
+            files.push(file);
+        }
+        self.save_uploaded_files(files)
+    }
+
     // ── Clear (logout) ──────────────────────────────────────────────
 
     pub fn clear_state(&self) -> Result<(), AppError> {
@@ -103,12 +134,12 @@ impl AppState {
         config_guard.user_config = None;
         self.save_config(&config_guard)?;
 
-        // Clear skipped files
-        let mut files_guard = self.skipped_files
+        // Clear uploaded files
+        let mut files_guard = self.uploaded_files
             .lock()
             .map_err(|_| AppError::LockingError)?;
         *files_guard = None;
-        match std::fs::remove_file(&self.skipped_files_path) {
+        match std::fs::remove_file(&self.uploaded_files_path) {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(AppError::from(e)),
@@ -160,13 +191,13 @@ pub struct OAuthConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
-pub struct SkippedFile {
+pub struct UploadedFile {
     pub filename: String,
     pub size: i64,
     pub device_id: String,
 }
 
-impl SkippedFile {
+impl UploadedFile {
     pub fn new(filename: String, size: i64, device_id: String) -> Self {
         Self {
             filename,

@@ -113,7 +113,22 @@ async fn get_camera() -> Result<Value, Value> {
         .map_err(|e| err_response(AppError::internal(&format!("File listing failed: {}", e))))?;
 
     match result {
-        Some(cam) => cam.to_json().map_err(|e| err_response(AppError::from(e))),
+        Some(mut cam) => {
+            // Filter out files that have already been uploaded
+            let state = APP_STATE.get();
+            if let Some(state) = state {
+                let uploaded = state.get_uploaded_files();
+                let before = cam.files.len();
+                cam.files.retain(|f| {
+                    !uploaded.iter().any(|u| u.filename == f.filename && u.device_id == cam.camera.device_id)
+                });
+                let filtered = before - cam.files.len();
+                if filtered > 0 {
+                    info!("Filtered out {} already-uploaded files", filtered);
+                }
+            }
+            cam.to_json().map_err(|e| err_response(AppError::from(e)))
+        }
         None => Ok(serde_json::json!({
             "message": "Camera detected but could not list files",
             "device_id": device_id,
@@ -179,6 +194,18 @@ async fn upload_file(
 
     info!("Upload file: {} (mount: {})", file_path, mount_point);
 
+    // Check if this file was already uploaded
+    if let Some(state) = APP_STATE.get() {
+        let uploaded = state.get_uploaded_files();
+        if uploaded.iter().any(|u| u.filename == filename && u.device_id == device_id) {
+            info!("File {} already in uploaded list, skipping", filename);
+            return Ok(serde_json::json!({
+                "filename": filename,
+                "status": "Completed",
+            }));
+        }
+    }
+
     // Step 1: Resolve to a local file (downloads from PTP if needed, with progress)
     let (local_path, file_size, is_temp) = resolve_local_file(
         &file_path, &mount_point, &filename, &app,
@@ -209,6 +236,19 @@ async fn upload_file(
     if status == "Completed" || upload_id.is_none() {
         info!("File {} already uploaded (status: {})", filename, status);
         if is_temp { let _ = std::fs::remove_file(&local_path); }
+
+        // Track as uploaded so it's filtered on future scans
+        if let Some(state) = APP_STATE.get() {
+            let uploaded_file = crate::state::UploadedFile::new(
+                filename.clone(),
+                file_size as i64,
+                device_id.clone(),
+            );
+            if let Err(e) = state.add_uploaded_file(uploaded_file) {
+                error!("Failed to save uploaded file record: {}", e);
+            }
+        }
+
         return Ok(serde_json::json!({
             "filename": filename,
             "status": "Completed",
@@ -228,6 +268,18 @@ async fn upload_file(
     if is_temp { let _ = tokio::fs::remove_file(&local_path).await; }
 
     result.map_err(|e| err_response(e))?;
+
+    // Track this file as uploaded so it's filtered out on future scans
+    if let Some(state) = APP_STATE.get() {
+        let uploaded_file = crate::state::UploadedFile::new(
+            filename.clone(),
+            file_size as i64,
+            device_id.clone(),
+        );
+        if let Err(e) = state.add_uploaded_file(uploaded_file) {
+            error!("Failed to save uploaded file record: {}", e);
+        }
+    }
 
     info!("File {} uploaded successfully", filename);
     Ok(serde_json::json!({
@@ -314,6 +366,16 @@ async fn set_host(host: Option<String>) -> Result<(), Value> {
     Ok(())
 }
 
+fn cleanup_ptp_temp_dir() {
+    let ptp_temp_dir = std::env::temp_dir().join("altoid_ptp");
+    if ptp_temp_dir.exists() {
+        info!("Cleaning up PTP temp directory: {:?}", ptp_temp_dir);
+        if let Err(e) = fs::remove_dir_all(&ptp_temp_dir) {
+            error!("Failed to clean up PTP temp directory: {}", e);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let timestamp = Local::now().format("%Y-%m-%d");
@@ -332,6 +394,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(logger)
         .setup(|app| {
+            cleanup_ptp_temp_dir();
+
             let app_dir: PathBuf = app.path().app_local_data_dir().unwrap();
             info!("Application data directory: {:?}", app_dir);
             fs::create_dir_all(&app_dir)?;
@@ -354,6 +418,11 @@ pub fn run() {
             get_host,
             set_host,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                cleanup_ptp_temp_dir();
+            }
+        });
 }
