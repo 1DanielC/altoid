@@ -239,11 +239,16 @@ async fn load_config() -> Result<Value, Value> {
             .map_err(|e| err_response(AppError::from(e)));
     }
 
-    // Fetch from remote
+    // Fetch from remote — if it fails, the app can still run without OAuth config.
+    // The user just won't be able to log in until bootstrap config is available.
     info!("No OAuth config found, fetching bootstrap config...");
-    let response = fetch_bootstrap_config()
-        .await
-        .map_err(|e| err_response(e))?;
+    let response = match fetch_bootstrap_config().await {
+        Ok(r) => r,
+        Err(e) => {
+            info!("Could not fetch bootstrap config ({}), continuing without auth", e);
+            return Ok(Value::Null);
+        }
+    };
 
     // Parse and save
     info!("Bootstrap config response: {}", serde_json::to_string(&response).unwrap_or_default());

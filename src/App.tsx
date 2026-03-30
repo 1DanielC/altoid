@@ -16,7 +16,13 @@ function App() {
 
   useEffect(() => {
     invoke('load_config')
-      .then(async () => {
+      .then(async (config) => {
+        if (!config) {
+          // No bootstrap config available — app runs without auth
+          console.log('No OAuth config available, running without auth');
+          setConfigLoaded(true);
+          return;
+        }
         // Check if user is already authenticated
         try {
           const user = await invoke('check_user');
