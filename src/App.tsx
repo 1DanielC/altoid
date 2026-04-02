@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { USER_QUERY_KEY } from './hooks/queries/useUserQuery';
+import { useNotification } from './contexts/NotificationContext';
 import Header from './components/Header';
+import NotificationBar from './components/NotificationBar';
 import Content from './components/Content';
 import Footer from './components/Footer';
 import SettingsMenu from './components/SettingsMenu';
@@ -11,8 +13,8 @@ import './App.css';
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
-  const [configError, setConfigError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { notify } = useNotification();
 
   useEffect(() => {
     invoke('load_config')
@@ -36,10 +38,10 @@ function App() {
       })
       .catch((e) => {
         console.error('Failed to load config:', e);
-        setConfigError(typeof e === 'string' ? e : JSON.stringify(e));
+        notify('error', `Config error: ${typeof e === 'string' ? e : JSON.stringify(e)}`);
         setConfigLoaded(true);
       });
-  }, [queryClient]);
+  }, [queryClient, notify]);
 
   if (!configLoaded) {
     return (
@@ -53,13 +55,9 @@ function App() {
 
   return (
     <div id="app">
-      {configError && (
-        <div style={{ background: '#fff3cd', color: '#856404', padding: '8px 12px', fontSize: 12, textAlign: 'center' }}>
-          Config error: {configError}
-        </div>
-      )}
       <Header onOpenSettings={() => setSettingsOpen(true)} />
       <Content />
+      <NotificationBar />
       <Footer />
       <SettingsMenu isOpen={settingsOpen} setIsOpen={setSettingsOpen} />
     </div>

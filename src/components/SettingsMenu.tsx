@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useUserQuery, useLoginMutation, useLogoutMutation } from '../contexts/AppContext';
+import { useUserQuery, useLoginMutation, useLogoutMutation, useNotification } from '../contexts/AppContext';
 import { getLogEntries } from '../services/log';
 import { getHostOverride, setHostOverride } from '../contexts/services/ApiService';
 import './SettingsMenu.css';
@@ -60,6 +60,7 @@ export default function SettingsMenu({ isOpen, setIsOpen }: SettingsMenuProps) {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [hostSaveStatus, setHostSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const { data: user } = useUserQuery();
+  const { notify } = useNotification();
   const loginMutation = useLoginMutation();
   const logoutMutation = useLogoutMutation();
 
@@ -90,9 +91,11 @@ export default function SettingsMenu({ isOpen, setIsOpen }: SettingsMenuProps) {
       setSavedHost(selectedHost);
       logoutMutation.mutate();
       setHostSaveStatus('saved');
+      notify('success', `Switched to ${ENV_OPTIONS.find(o => o.value === selectedHost)?.label ?? selectedHost}`);
       setTimeout(() => setHostSaveStatus('idle'), 2000);
     } catch {
       setHostSaveStatus('error');
+      notify('error', 'Failed to switch environment');
       setTimeout(() => setHostSaveStatus('idle'), 2000);
     }
   };
