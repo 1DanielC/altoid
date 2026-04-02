@@ -150,7 +150,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>)
     }
 }
 
-fn parse_gphoto2_file_list(output: &str) -> Vec<CameraFile> {
+pub fn parse_gphoto2_file_list(output: &str) -> Vec<CameraFile> {
     let mut files = Vec::new();
     let mut current_folder = String::new();
 
@@ -296,7 +296,7 @@ fn find_camera_files() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>) {
     (None, Vec::new(), Some(error_msg))
 }
 
-fn guess_content_type(path: &PathBuf) -> String {
+pub fn guess_content_type(path: &PathBuf) -> String {
     match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
         Some("jpg") | Some("jpeg") => "image/jpeg".to_string(),
         Some("png") => "image/png".to_string(),
