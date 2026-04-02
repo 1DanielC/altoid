@@ -61,8 +61,8 @@ export default function SettingsMenu({ isOpen, setIsOpen }: SettingsMenuProps) {
   const [hostSaveStatus, setHostSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const { data: user } = useUserQuery();
   const { notify } = useNotification();
-  const loginMutation = useLoginMutation(notify);
-  const logoutMutation = useLogoutMutation(notify);
+  const loginMutation = useLoginMutation();
+  const logoutMutation = useLogoutMutation();
 
   // Load current host when menu opens
   useEffect(() => {

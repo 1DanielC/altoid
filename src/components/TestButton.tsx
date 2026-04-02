@@ -76,6 +76,7 @@ export default function TestButton() {
     })));
 
     // Process one at a time, top to bottom
+    let failedCount = 0;
     for (const file of files) {
       updateUpload(file.filename, { status: 'downloading', bytes: 0 });
 
@@ -89,6 +90,7 @@ export default function TestButton() {
           totalBytes: file.size,
         });
       } catch (e: unknown) {
+        failedCount++;
         const parsed = parseIpcError(e);
         updateUpload(file.filename, {
           status: 'error',
@@ -100,9 +102,8 @@ export default function TestButton() {
     }
 
     setLoading(null);
-    const failed = uploads.filter(u => u.status === 'error').length;
-    if (failed > 0) {
-      notify('warning', `Upload finished with ${failed} failed file(s)`);
+    if (failedCount > 0) {
+      notify('warning', `Upload finished with ${failedCount} failed file(s)`);
     } else {
       notify('success', `All ${files.length} file(s) uploaded successfully`);
     }
