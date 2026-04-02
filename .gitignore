@@ -12,21 +12,16 @@ dist
 dist-ssr
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+# IDE Generated directories
 .idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+altoid.iml
 
+# Claude
+.claude/worktrees
+.claude/settings.local.json
+
+# Rust
 dist
 
-.claude
-
-Cargo.lock
+# Typescript
 yarn.lock
-altoid.iml

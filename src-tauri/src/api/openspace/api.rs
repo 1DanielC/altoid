@@ -12,7 +12,7 @@ use tokio_util::io::ReaderStream;
 use url::Url;
 use crate::APP_STATE;
 
-static USER_AGENT: &str = "ai.openspace.tactic/0.0.1";
+static USER_AGENT: &str = "ai.openspace.altoid/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
 
 pub async fn make_request(
