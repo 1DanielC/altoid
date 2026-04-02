@@ -367,10 +367,10 @@ async fn set_host(host: Option<String>) -> Result<(), Value> {
     Ok(())
 }
 
-static API_ACTIVITY_LOG_PATH: &str = "/api/desktop-client/activity-log";
-
 #[tauri::command]
 async fn export_activity_log(entries: Vec<Value>) -> Result<Value, Value> {
+    use crate::api::openspace::api::API_ACTIVITY_LOG_PATH;
+
     info!("Exporting {} activity log entries to OpenSpace", entries.len());
 
     if entries.is_empty() {
@@ -404,8 +404,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            cleanup_ptp_temp_dir();
-
             let app_dir: PathBuf = app.path().app_local_data_dir().unwrap();
             fs::create_dir_all(&app_dir)?;
 
@@ -426,6 +424,9 @@ pub fn run() {
                 .build();
 
             app.handle().plugin(logger)?;
+
+            // Clean up temp files from previous sessions (after logger is ready)
+            cleanup_ptp_temp_dir();
 
             info!("Application data directory: {:?}", app_dir);
 

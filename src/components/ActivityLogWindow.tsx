@@ -67,6 +67,13 @@ export default function ActivityLogWindow() {
   const errorCount = entries.filter(e => e.level === 'error').length;
   const warningCount = entries.filter(e => e.level === 'warning').length;
 
+  function exportButtonLabel(): string {
+    if (exporting) return 'Exporting...';
+    if (exportStatus === 'success') return 'Exported';
+    if (exportStatus === 'error') return 'Export Failed';
+    return 'Export to OpenSpace';
+  }
+
   return (
     <div className="activity-log-window">
       <div className="activity-log-header" data-tauri-drag-region>
@@ -87,7 +94,7 @@ export default function ActivityLogWindow() {
                 onClick={handleExport}
                 disabled={exporting}
               >
-                {exporting ? 'Exporting...' : exportStatus === 'success' ? 'Exported' : exportStatus === 'error' ? 'Export Failed' : 'Export to OpenSpace'}
+                {exportButtonLabel()}
               </button>
               <button className="log-clear-btn" onClick={clearLog}>Clear</button>
             </>
