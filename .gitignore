@@ -15,6 +15,9 @@ dist-ssr
 # IDE Generated directories
 .idea
 altoid.iml
+.DS_Store
+src-tauri/.DS_Store
+src-tauri/icons/.DS_Store
 
 # Claude
 .claude/worktrees
