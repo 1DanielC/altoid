@@ -5,6 +5,10 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri_plugin_log::log::{error, info};
 
+pub static PTP_MOUNT_POINT: &str = "PTP";
+pub static GPHOTO2_CMD: &str = "gphoto2";
+pub static DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DetectedCamera {
     pub info: &'static CameraInfo,
@@ -101,7 +105,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>)
     }
 
     // Try to detect cameras
-    let detect_output = Command::new("gphoto2")
+    let detect_output = Command::new(GPHOTO2_CMD)
         .arg("--auto-detect")
         .output();
 
@@ -124,7 +128,7 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>)
     info!("Camera detected via gphoto2: {}", detect_stdout.trim());
 
     // List files on the camera
-    let list_output = Command::new("gphoto2")
+    let list_output = Command::new(GPHOTO2_CMD)
         .arg("--list-files")
         .output();
 
@@ -143,10 +147,10 @@ fn find_camera_files_ptp() -> (Option<PathBuf>, Vec<CameraFile>, Option<String>)
     if files.is_empty() {
         let error_msg = "Camera connected via PTP but no files found".to_string();
         error!("{}", error_msg);
-        (Some(PathBuf::from("PTP")), Vec::new(), Some(error_msg))
+        (Some(PathBuf::from(PTP_MOUNT_POINT)), Vec::new(), Some(error_msg))
     } else {
         info!("Found {} files via PTP", files.len());
-        (Some(PathBuf::from("PTP")), files, None)
+        (Some(PathBuf::from(PTP_MOUNT_POINT)), files, None)
     }
 }
 
@@ -303,10 +307,10 @@ pub fn guess_content_type(path: &PathBuf) -> String {
         Some("mp4") => "video/mp4".to_string(),
         Some("mov") => "video/quicktime".to_string(),
         Some("dng") => "image/x-adobe-dng".to_string(),
-        Some("raw") => "application/octet-stream".to_string(),
+        Some("raw") => DEFAULT_CONTENT_TYPE.to_string(),
         Some("insp") => "image/jpeg".to_string(),
         Some("insv") => "video/mp4".to_string(),
-        _ => "application/octet-stream".to_string(),
+        _ => DEFAULT_CONTENT_TYPE.to_string(),
     }
 }
 

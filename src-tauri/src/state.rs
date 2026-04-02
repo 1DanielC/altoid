@@ -7,6 +7,10 @@ use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use tauri_plugin_log::log::info;
 
+static CONFIG_FILENAME: &str = "altoid_config.json";
+static UPLOADED_FILES_FILENAME: &str = "uploaded_files.json";
+static LEGACY_UPLOADED_FILES_FILENAME: &str = "skipped_files.json";
+
 /// Unified config file persisted as `altoid_config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AltoidConfig {
@@ -28,13 +32,13 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(app_dir: PathBuf) -> Self {
-        let config_path = app_dir.join("altoid_config.json");
-        let uploaded_files_path = app_dir.join("uploaded_files.json");
+        let config_path = app_dir.join(CONFIG_FILENAME);
+        let uploaded_files_path = app_dir.join(UPLOADED_FILES_FILENAME);
 
         let config = load_json::<AltoidConfig>(&config_path).unwrap_or_default();
         // Also try loading from legacy path for backwards compatibility
         let uploaded_files = load_json::<Vec<UploadedFile>>(&uploaded_files_path)
-            .or_else(|| load_json::<Vec<UploadedFile>>(&app_dir.join("skipped_files.json")));
+            .or_else(|| load_json::<Vec<UploadedFile>>(&app_dir.join(LEGACY_UPLOADED_FILES_FILENAME)));
 
         Self {
             config_path,

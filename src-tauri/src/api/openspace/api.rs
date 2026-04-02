@@ -15,6 +15,12 @@ use crate::APP_STATE;
 static USER_AGENT: &str = "ai.openspace.altoid/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
 
+pub(crate) static FILE_PROGRESS_EVENT: &str = "file-progress";
+pub(crate) static API_UPLOADS_PATH: &str = "/api/desktop-client/uploads";
+static API_CONFIG_PATH: &str = "/api/desktop-client/config";
+static API_SELF_PATH: &str = "/api/self";
+pub(crate) static PTP_TEMP_DIR_NAME: &str = "altoid_ptp";
+
 pub async fn make_request(
     method: &str,
     path: &str,
@@ -87,7 +93,7 @@ pub async fn resolve_local_file(
     filename: &str,
     app: &AppHandle,
 ) -> Result<(std::path::PathBuf, u64, bool), AppError> {
-    if mount_point == "PTP" {
+    if mount_point == crate::camera::camera::PTP_MOUNT_POINT {
         let local_path = download_ptp_file_to_disk(file_path, filename, app).await?;
         let size = tokio::fs::metadata(&local_path).await
             .map_err(|e| AppError::internal(&format!("Failed to stat temp file: {}", e)))?
@@ -125,7 +131,7 @@ pub async fn upload_file_streaming(
 
     let base = Url::parse(&host)
         .map_err(|e| AppError::url_parse(format!("Invalid Host: {}", host), e))?;
-    let path = format!("/api/desktop-client/uploads/{}", upload_id);
+    let path = format!("{}/{}", API_UPLOADS_PATH, upload_id);
     let url = base.join(&path)
         .map_err(|e| AppError::url_parse(format!("Could not build url: {}", path), e))?;
 
@@ -149,7 +155,7 @@ pub async fn upload_file_streaming(
     let progress_stream = reader_stream.map(move |chunk| {
         if let Ok(ref bytes) = chunk {
             bytes_sent += bytes.len() as u64;
-            let _ = app_clone.emit("file-progress", serde_json::json!({
+            let _ = app_clone.emit(FILE_PROGRESS_EVENT, serde_json::json!({
                 "filename": filename_owned,
                 "stage": "uploading",
                 "bytes": bytes_sent,
@@ -207,7 +213,7 @@ async fn download_ptp_file_to_disk(
 ) -> Result<std::path::PathBuf, AppError> {
     info!("Downloading PTP file to disk: {}", camera_path);
 
-    let temp_dir = std::env::temp_dir().join("altoid_ptp");
+    let temp_dir = std::env::temp_dir().join(PTP_TEMP_DIR_NAME);
     tokio::fs::create_dir_all(&temp_dir).await
         .map_err(|e| AppError::internal(&format!("Failed to create temp dir: {}", e)))?;
 
@@ -227,7 +233,7 @@ async fn download_ptp_file_to_disk(
     for attempt in 0..2 {
         let _ = tokio::fs::remove_file(&temp_file).await;
 
-        let mut child = tokio::process::Command::new("gphoto2")
+        let mut child = tokio::process::Command::new(crate::camera::camera::GPHOTO2_CMD)
             .args([
                 "--folder", &folder,
                 "--get-file", &gphoto_filename,
@@ -252,7 +258,7 @@ async fn download_ptp_file_to_disk(
                     let size = meta.len();
                     if size != last_size {
                         last_size = size;
-                        let _ = app_clone.emit("file-progress", serde_json::json!({
+                        let _ = app_clone.emit(FILE_PROGRESS_EVENT, serde_json::json!({
                             "filename": filename_owned,
                             "stage": "downloading",
                             "bytes": size,
@@ -271,7 +277,7 @@ async fn download_ptp_file_to_disk(
         if output.status.success() {
             // Emit final progress with actual file size
             if let Ok(meta) = tokio::fs::metadata(&temp_file).await {
-                let _ = app.emit("file-progress", serde_json::json!({
+                let _ = app.emit(FILE_PROGRESS_EVENT, serde_json::json!({
                     "filename": filename,
                     "stage": "downloading",
                     "bytes": meta.len(),
@@ -316,7 +322,7 @@ pub async fn fetch_bootstrap_config() -> Result<Value, AppError> {
 
     let base = Url::parse(&host)
         .map_err(|e| AppError::url_parse(format!("Invalid Host: {}", host), e))?;
-    let url = base.join("/api/desktop-client/config")
+    let url = base.join(API_CONFIG_PATH)
         .map_err(|e| AppError::url_parse("Could not build bootstrap URL".to_string(), e))?;
 
     let response = API_CLIENT
@@ -353,7 +359,7 @@ pub async fn fetch_bootstrap_config() -> Result<Value, AppError> {
 /// because we need to treat a 401 response as Ok(None) rather than an error,
 /// but still need explicit status codes for other errors.
 pub async fn get_user_info() -> Result<Option<UserInfo>, AppError> {
-    match make_request("GET", "/api/self", Value::Null, None).await {
+    match make_request("GET", API_SELF_PATH, Value::Null, None).await {
         Ok(res) => {
             let user_info = from_value(res)?;
 

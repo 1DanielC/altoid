@@ -1,6 +1,6 @@
 use std::fs;
 use crate::api::oauth::auth::authenticate_user;
-use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request};
+use crate::api::openspace::api::{fetch_bootstrap_config, get_user_info, make_request, API_UPLOADS_PATH, PTP_TEMP_DIR_NAME};
 use crate::state::OAuthConfig;
 use crate::api::openspace::pub_user_info::UserInfo;
 use crate::error::AppError;
@@ -144,7 +144,7 @@ async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, V
 
     for file in &files {
         let filename = file["filename"].as_str().unwrap_or("unknown");
-        let content_type = file["content_type"].as_str().unwrap_or("application/octet-stream");
+        let content_type = file["content_type"].as_str().unwrap_or(crate::camera::camera::DEFAULT_CONTENT_TYPE);
         let size = file["size"].as_i64().unwrap_or(0);
 
         let body = serde_json::json!({
@@ -154,7 +154,7 @@ async fn create_uploads(device_id: String, files: Vec<Value>) -> Result<Value, V
             "size": size,
         });
 
-        match make_request("POST", "/api/desktop-client/uploads", body, None).await {
+        match make_request("POST", API_UPLOADS_PATH, body, None).await {
             Ok(response) => {
                 info!("Created upload for {}: {}", filename, response);
                 results.push(serde_json::json!({
@@ -223,7 +223,7 @@ async fn upload_file(
         "size": file_size as i64,
     });
 
-    let create_response = make_request("POST", "/api/desktop-client/uploads", body, None)
+    let create_response = make_request("POST", API_UPLOADS_PATH, body, None)
         .await
         .map_err(|e| {
             if is_temp { let _ = std::fs::remove_file(&local_path); }
@@ -367,7 +367,7 @@ async fn set_host(host: Option<String>) -> Result<(), Value> {
 }
 
 fn cleanup_ptp_temp_dir() {
-    let ptp_temp_dir = std::env::temp_dir().join("altoid_ptp");
+    let ptp_temp_dir = std::env::temp_dir().join(PTP_TEMP_DIR_NAME);
     if ptp_temp_dir.exists() {
         info!("Cleaning up PTP temp directory: {:?}", ptp_temp_dir);
         if let Err(e) = fs::remove_dir_all(&ptp_temp_dir) {
