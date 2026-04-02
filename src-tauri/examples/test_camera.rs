@@ -7,9 +7,9 @@ fn main() {
     match altoid_lib::camera::camera::find_camera() {
         Some(camera_with_files) => {
             info!("Camera detected:");
-            info!("  Device: {}", camera_with_files.info.device);
-            info!("  Vendor: {}", camera_with_files.info.vendor);
-            info!("  Vendor ID: {}", camera_with_files.info.vendor_id);
+            info!("  Device: {}", camera_with_files.camera.info.device);
+            info!("  Vendor: {}", camera_with_files.camera.info.vendor);
+            info!("  Vendor ID: {}", camera_with_files.camera.info.vendor_id);
             info!("  Mount point: {:?}", camera_with_files.mount_point);
             info!("  Files found: {}", camera_with_files.files.len());
 
@@ -20,7 +20,7 @@ fn main() {
             if !camera_with_files.files.is_empty() {
                 info!("\nFirst 10 files:");
                 for (i, file) in camera_with_files.files.iter().take(10).enumerate() {
-                    info!("  {}. {}", i + 1, file.display());
+                    info!("  {}. {} ({}, {})", i + 1, file.filename, file.content_type, file.size);
                 }
             }
         }
