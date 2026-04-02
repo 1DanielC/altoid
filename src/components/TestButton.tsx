@@ -3,6 +3,7 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCamera, uploadFile, CameraResult } from "../contexts/services/CameraService.ts";
 import { request } from "../contexts/services/ApiService.ts";
 import { logError } from "../services/log.ts";
+import { parseIpcError } from "../services/ipcError.ts";
 import { useNotification } from "../contexts/AppContext.tsx";
 import UploadTable, { UploadEntry } from "./UploadTable.tsx";
 
@@ -26,10 +27,8 @@ export default function TestButton() {
       if (label === "camera") setCameraData(r as CameraResult | null);
       notify('success', `${label} completed successfully`);
     } catch (e: unknown) {
-      const msg = typeof e === 'string' ? e
-        : e instanceof Error ? e.message
-        : JSON.stringify(e, null, 2);
-      notify('error', `${label} failed: ${msg}`);
+      const parsed = parseIpcError(e);
+      notify(parsed.type, parsed.message);
     } finally {
       setLoading(null);
     }
@@ -90,15 +89,13 @@ export default function TestButton() {
           totalBytes: file.size,
         });
       } catch (e: unknown) {
-        const msg = typeof e === 'string' ? e
-          : e instanceof Error ? e.message
-          : JSON.stringify(e);
+        const parsed = parseIpcError(e);
         updateUpload(file.filename, {
           status: 'error',
-          error: msg,
+          error: parsed.message,
           bytes: 0,
         });
-        logError(`Upload failed for ${file.filename}: ${msg}`);
+        logError(`Upload failed for ${file.filename}: ${parsed.message}`);
       }
     }
 

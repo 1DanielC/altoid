@@ -3,6 +3,7 @@ import { getUser, logout } from '../../contexts/services/ApiService';
 import { UserInfo } from '../../rust-api/model/AuthResult';
 import { USER_QUERY_KEY } from '../queries/useUserQuery';
 import { NotificationType } from '../../contexts/NotificationContext';
+import { parseIpcError } from '../../services/ipcError';
 
 interface LoginParams {
   clearAuth?: boolean;
@@ -24,7 +25,8 @@ export function useLoginMutation(notify?: (type: NotificationType, message: stri
     },
     onError: (error) => {
       console.error('Login failed:', error);
-      notify?.('error', `Sign in failed: ${error.message}`);
+      const parsed = parseIpcError(error);
+      notify?.(parsed.type, parsed.message);
     },
   });
 }

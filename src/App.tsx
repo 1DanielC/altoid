@@ -56,8 +56,8 @@ function App() {
   return (
     <div id="app">
       <Header onOpenSettings={() => setSettingsOpen(true)} />
-      <NotificationBar />
       <Content />
+      <NotificationBar />
       <Footer />
       <SettingsMenu isOpen={settingsOpen} setIsOpen={setSettingsOpen} />
     </div>

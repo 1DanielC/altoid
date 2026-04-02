@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { logout } from '../../contexts/services/ApiService';
 import { USER_QUERY_KEY } from '../queries/useUserQuery';
 import { NotificationType } from '../../contexts/NotificationContext';
+import { parseIpcError } from '../../services/ipcError';
 
 export function useLogoutMutation(notify?: (type: NotificationType, message: string) => void) {
   const queryClient = useQueryClient();
@@ -15,7 +16,8 @@ export function useLogoutMutation(notify?: (type: NotificationType, message: str
       notify?.('info', 'Signed out successfully');
     },
     onError: (error) => {
-      notify?.('error', `Sign out failed: ${error.message}`);
+      const parsed = parseIpcError(error);
+      notify?.(parsed.type, parsed.message);
     },
   });
 }
