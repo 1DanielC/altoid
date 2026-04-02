@@ -24,6 +24,7 @@ mod state;
 mod traits;
 
 pub static APP_STATE: OnceLock<AppState> = OnceLock::new();
+static LOG_DIR_NAME: &str = "logs";
 
 fn err_response(app_error: AppError) -> Value {
     error!("{}", app_error);
@@ -366,6 +367,27 @@ async fn set_host(host: Option<String>) -> Result<(), Value> {
     Ok(())
 }
 
+#[tauri::command]
+async fn export_activity_log(entries: Vec<Value>) -> Result<Value, Value> {
+    use crate::api::openspace::api::API_ACTIVITY_LOG_PATH;
+
+    info!("Exporting {} activity log entries to OpenSpace", entries.len());
+
+    if entries.is_empty() {
+        return Err(err_response(AppError::invalid_arg(
+            "No activity log entries to export.",
+        )));
+    }
+
+    let body = serde_json::json!({
+        "entries": entries,
+    });
+
+    make_request("POST", API_ACTIVITY_LOG_PATH, body, None)
+        .await
+        .map_err(|e| err_response(e))
+}
+
 fn cleanup_ptp_temp_dir() {
     let ptp_temp_dir = std::env::temp_dir().join(PTP_TEMP_DIR_NAME);
     if ptp_temp_dir.exists() {
@@ -378,27 +400,36 @@ fn cleanup_ptp_temp_dir() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let timestamp = Local::now().format("%Y-%m-%d");
-    let filename = format!("log-{}.log", timestamp);
-    let logger = Builder::new()
-        .targets([
-            Target::new(TargetKind::Stdout),
-            Target::new(TargetKind::LogDir {
-                file_name: Some(filename),
-            }),
-        ])
-        .build();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(logger)
         .setup(|app| {
+            let app_dir: PathBuf = app.path().app_local_data_dir().unwrap();
+            fs::create_dir_all(&app_dir)?;
+
+            // Set up logging to the same directory as config
+            let log_dir = app_dir.join(LOG_DIR_NAME);
+            fs::create_dir_all(&log_dir)?;
+
+            let timestamp = Local::now().format("%Y-%m-%d");
+            let filename = format!("log-{}.log", timestamp);
+            let logger = Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::Folder {
+                        path: log_dir,
+                        file_name: Some(filename),
+                    }),
+                ])
+                .build();
+
+            app.handle().plugin(logger)?;
+
+            // Clean up temp files from previous sessions (after logger is ready)
             cleanup_ptp_temp_dir();
 
-            let app_dir: PathBuf = app.path().app_local_data_dir().unwrap();
             info!("Application data directory: {:?}", app_dir);
-            fs::create_dir_all(&app_dir)?;
+
             let app_state = AppState::new(app_dir);
             APP_STATE
                 .set(app_state)
@@ -415,6 +446,7 @@ pub fn run() {
             load_config,
             create_uploads,
             upload_file,
+            export_activity_log,
             get_host,
             set_host,
         ])

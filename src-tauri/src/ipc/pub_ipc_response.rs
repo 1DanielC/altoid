@@ -51,14 +51,14 @@ impl IpcStatus {
         match self {
             IpcStatus::Ok => "Ok",
             IpcStatus::Accepted => "Accepted",
-            IpcStatus::InvalidArgument => "Invalid argument",
-            IpcStatus::Conflict => "Conflict",
-            IpcStatus::NotAuthenticated => "User not logged in",
-            IpcStatus::NotAuthorized => "User not authorized",
-            IpcStatus::NotFound => "Resource not found",
+            IpcStatus::InvalidArgument => "The request was invalid. Please check your input and try again.",
+            IpcStatus::Conflict => "This action conflicts with another operation. Please try again.",
+            IpcStatus::NotAuthenticated => "You are not logged in. Please open Settings and log in to continue.",
+            IpcStatus::NotAuthorized => "You don't have permission to perform this action. Contact your OpenSpace administrator.",
+            IpcStatus::NotFound => "The requested resource was not found. It may have been moved or deleted.",
             IpcStatus::ImATeapot => "🫖",
-            IpcStatus::Unavailable => "Resource Unavailable",
-            IpcStatus::InternalError => "Internal Error. Please Contact OpenSpace",
+            IpcStatus::Unavailable => "The server is temporarily unavailable. Please try again in a few minutes.",
+            IpcStatus::InternalError => "Something went wrong. Please try again or contact OpenSpace support if the problem persists.",
         }
     }
 }

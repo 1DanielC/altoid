@@ -28,30 +28,30 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum AppError {
     // Authentication errors
-    #[error("OAuth configuration not found. Please run login first.")]
+    #[error("Login required. Please open Settings and log in to continue.")]
     OAuthConfigNotFound,
 
-    #[error("Authentication failed: {message}")]
+    #[error("Authentication failed: {message}. Please try logging in again.")]
     AuthenticationFailed {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("Device code expired. Please try again.")]
+    #[error("Your login code expired. Please try logging in again.")]
     DeviceCodeExpired,
 
-    #[error("Not authenticated. Please log in.")]
+    #[error("You are not logged in. Please open Settings and log in to continue.")]
     NotAuthenticated,
 
     // API errors
-    #[error("API request failed: {status} - {message}")]
+    #[error("Server request failed ({status}): {message}")]
     ApiRequest { status: u16, message: String },
 
-    #[error("API not initialized. Please authenticate first.")]
+    #[error("Not connected to OpenSpace. Please log in first.")]
     ApiNotInitialized,
 
-    #[error("Failed to parse API response: {message}")]
+    #[error("Received an unexpected response from the server: {message}")]
     ApiParseFailed {
         message: String,
         #[source]
@@ -59,38 +59,38 @@ pub enum AppError {
     },
 
     // Cache errors
-    #[error("Failed to read cache file '{file}': {source}")]
+    #[error("Could not read local data file '{file}'. Try restarting the app.")]
     CacheRead {
         file: String,
         #[source]
         source: std::io::Error,
     },
 
-    #[error("Failed to write cache file '{file}': {source}")]
+    #[error("Could not save local data file '{file}'. Check disk space and permissions.")]
     CacheWrite {
         file: String,
         #[source]
         source: std::io::Error,
     },
 
-    #[error("Cache file not found: {0}")]
+    #[error("Local data file not found: {0}. It may have been deleted or moved.")]
     CacheNotFound(String),
 
     // Camera errors
-    #[error("No camera found")]
+    #[error("No camera detected. Please connect a camera and try again.")]
     CameraNotFound,
 
-    #[error("Camera unavailable (possibly claimed by another app)")]
+    #[error("Camera is in use by another application. Close other camera apps and try again.")]
     CameraUnavailable,
 
-    #[error("Camera operation failed: {message}")]
+    #[error("Camera error: {message}")]
     CameraOperation {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("Resource conflict: {message}")]
+    #[error("Conflict: {message}")]
     Conflict {
         message: String,
         #[source]
@@ -98,18 +98,18 @@ pub enum AppError {
     },
 
     // Network errors
-    #[error("Network request failed: {0}")]
+    #[error("Could not reach the server. Check your internet connection and try again.")]
     Network(#[from] reqwest::Error),
 
-    #[error("Network timeout")]
+    #[error("The request timed out. Check your internet connection and try again.")]
     NetworkTimeout,
 
     // I/O errors
-    #[error("I/O error: {0}")]
+    #[error("A file operation failed: {0}. Check disk space and permissions.")]
     Io(#[from] std::io::Error),
 
     // URL parsing errors
-    #[error("URL parse error: {message}")]
+    #[error("Invalid server address: {message}. Check your host override in Settings.")]
     UrlParse {
         message: String,
         #[source]
@@ -117,28 +117,28 @@ pub enum AppError {
     },
 
     // Generic errors with context
-    #[error("Invalid argument: {message}")]
+    #[error("{message}")]
     InvalidArgument {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("Internal error: {message}")]
+    #[error("Something went wrong: {message}. Please try again or restart the app.")]
     Internal {
         message: String,
         #[source]
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    #[error("Could not acquire lock for resource")]
+    #[error("The app is busy. Please wait a moment and try again.")]
     LockingError,
 
     // Serialization errors
-    #[error("JSON serialization failed: {0}")]
+    #[error("Data processing error. Please try again or restart the app.")]
     JsonSerialization(#[from] serde_json::Error),
 
-    #[error("Unsupported OS: {0}")]
+    #[error("This operating system ({0}) is not supported. Altoid requires macOS, Windows, or Linux.")]
     UnsupportedOS(String),
 
     // Upload errors
