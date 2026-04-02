@@ -49,6 +49,13 @@
   background: #FF9800;
 }
 
+.log-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.log-export-btn,
 .log-clear-btn {
   font-size: 12px;
   padding: 5px 12px;
@@ -60,9 +67,26 @@
   transition: all 0.15s ease;
 }
 
+.log-export-btn:hover:not(:disabled),
 .log-clear-btn:hover {
   background: #f0f0f0;
   border-color: #bbb;
+}
+
+.log-export-btn {
+  background: #2196F3;
+  border-color: #1976D2;
+  color: #fff;
+}
+
+.log-export-btn:hover:not(:disabled) {
+  background: #1976D2;
+  border-color: #1565C0;
+}
+
+.log-export-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* ---------- Content ---------- */

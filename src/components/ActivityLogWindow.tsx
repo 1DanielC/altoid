@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { LogEntry, LogLevel, getLogEntries, subscribeToLog, clearLog } from '../services/log';
+import { exportActivityLog } from '../contexts/services/ApiService';
 import './ActivityLogWindow.css';
 
 function useLogEntries(): LogEntry[] {
@@ -32,6 +33,8 @@ function getLevelIcon(level: LogLevel): string {
 export default function ActivityLogWindow() {
   const entries = useLogEntries();
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Auto-scroll to bottom when new entries are added
   useEffect(() => {
@@ -39,6 +42,27 @@ export default function ActivityLogWindow() {
       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [entries]);
+
+  const handleExport = async () => {
+    setExporting(true);
+    setExportStatus('idle');
+    try {
+      await exportActivityLog(
+        entries.map(e => ({
+          level: e.level,
+          message: e.message,
+          timestamp: e.timestamp.toISOString(),
+        })),
+      );
+      setExportStatus('success');
+      setTimeout(() => setExportStatus('idle'), 3000);
+    } catch {
+      setExportStatus('error');
+      setTimeout(() => setExportStatus('idle'), 3000);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const errorCount = entries.filter(e => e.level === 'error').length;
   const warningCount = entries.filter(e => e.level === 'warning').length;
@@ -55,9 +79,20 @@ export default function ActivityLogWindow() {
             </span>
           )}
         </div>
-        {entries.length > 0 && (
-          <button className="log-clear-btn" onClick={clearLog}>Clear</button>
-        )}
+        <div className="log-header-actions">
+          {entries.length > 0 && (
+            <>
+              <button
+                className="log-export-btn"
+                onClick={handleExport}
+                disabled={exporting}
+              >
+                {exporting ? 'Exporting...' : exportStatus === 'success' ? 'Exported' : exportStatus === 'error' ? 'Export Failed' : 'Export to OpenSpace'}
+              </button>
+              <button className="log-clear-btn" onClick={clearLog}>Clear</button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="activity-log-content">

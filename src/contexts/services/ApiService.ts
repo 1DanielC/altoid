@@ -80,3 +80,25 @@ export async function setHostOverride(host: string | null): Promise<void> {
     throw error;
   }
 }
+
+export interface ActivityLogExportEntry {
+  level: string;
+  message: string;
+  timestamp: string;
+}
+
+export async function exportActivityLog(
+  entries: ActivityLogExportEntry[],
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<unknown> {
+  try {
+    return await withTimeout(
+      invoke("export_activity_log", { entries }),
+      timeoutMs,
+      `Request timeout: export_activity_log took longer than ${timeoutMs}ms`,
+    );
+  } catch (error) {
+    logError(`Failed to export activity log: ${error}`);
+    throw error;
+  }
+}
