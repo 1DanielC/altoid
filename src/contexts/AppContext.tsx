@@ -1,10 +1,13 @@
 import React, { ReactNode } from 'react';
 import { QueryProvider } from './QueryProvider';
+import { NotificationProvider } from './NotificationContext';
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   return (
     <QueryProvider>
-      {children}
+      <NotificationProvider>
+        {children}
+      </NotificationProvider>
     </QueryProvider>
   );
 };
@@ -17,3 +20,5 @@ export {
   useLogoutMutation,
   useDeleteDataMutation,
 } from '../hooks';
+
+export { useNotification } from './NotificationContext';

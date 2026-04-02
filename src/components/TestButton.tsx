@@ -3,6 +3,7 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCamera, uploadFile, CameraResult } from "../contexts/services/CameraService.ts";
 import { request } from "../contexts/services/ApiService.ts";
 import { logError } from "../services/log.ts";
+import { useNotification } from "../contexts/AppContext.tsx";
 import UploadTable, { UploadEntry } from "./UploadTable.tsx";
 
 interface FileProgress {
@@ -13,23 +14,22 @@ interface FileProgress {
 }
 
 export default function TestButton() {
-  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [cameraData, setCameraData] = useState<CameraResult | null>(null);
   const [uploads, setUploads] = useState<UploadEntry[]>([]);
+  const { notify } = useNotification();
 
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setLoading(label);
-    setResult(null);
     try {
       const r = await fn();
       if (label === "camera") setCameraData(r as CameraResult | null);
-      setResult(JSON.stringify(r, null, 2));
+      notify('success', `${label} completed successfully`);
     } catch (e: unknown) {
       const msg = typeof e === 'string' ? e
         : e instanceof Error ? e.message
         : JSON.stringify(e, null, 2);
-      setResult(`Error: ${msg}`);
+      notify('error', `${label} failed: ${msg}`);
     } finally {
       setLoading(null);
     }
@@ -59,7 +59,6 @@ export default function TestButton() {
 
   const handleUploadFiles = async () => {
     setLoading("uploading");
-    setResult(null);
 
     const mountPoint = cameraData?.mount_point ?? "";
     const deviceId = cameraData!.camera!.device_id;
@@ -104,6 +103,12 @@ export default function TestButton() {
     }
 
     setLoading(null);
+    const failed = uploads.filter(u => u.status === 'error').length;
+    if (failed > 0) {
+      notify('warning', `Upload finished with ${failed} failed file(s)`);
+    } else {
+      notify('success', `All ${files.length} file(s) uploaded successfully`);
+    }
   };
 
   const hasFiles = cameraData?.camera?.device_id && cameraData?.files && cameraData.files.length > 0;
@@ -145,7 +150,6 @@ export default function TestButton() {
         </div>
       )}
       <UploadTable uploads={uploads} />
-      {result && !loading && <pre className="test-result">{result}</pre>}
     </div>
   );
 }
