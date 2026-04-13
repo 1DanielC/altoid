@@ -16,9 +16,9 @@ static USER_AGENT: &str = "ai.openspace.altoid/0.0.1";
 static API_CLIENT: LazyLock<Client> = LazyLock::new(|| create_http_client());
 
 pub(crate) static FILE_PROGRESS_EVENT: &str = "file-progress";
-pub(crate) static API_UPLOADS_PATH: &str = "/api/desktop-client/uploads";
-pub(crate) static API_ACTIVITY_LOG_PATH: &str = "/api/desktop-client/activity-log";
-static API_CONFIG_PATH: &str = "/api/desktop-client/config";
+pub(crate) static API_UPLOADS_PATH: &str = "/api/v3/upcap/desktop-client/uploads";
+pub(crate) static API_ACTIVITY_LOG_PATH: &str = "/api/v3/upcap/desktop-client/logs";
+static API_CONFIG_PATH: &str = "/api/v3/upcap/desktop-client/config";
 static API_SELF_PATH: &str = "/api/self";
 pub(crate) static PTP_TEMP_DIR_NAME: &str = "altoid_ptp";
 
